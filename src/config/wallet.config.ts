@@ -16,7 +16,7 @@ export const privyConfig: PrivyClientConfig = {
       createOnLogin: "users-without-wallets",
     },
   },
-  loginMethods: ["email", "google", "apple", "farcaster"],
+  loginMethods: ["email"],
   appearance: {
     theme: "dark",
     accentColor: "#676FFF",
