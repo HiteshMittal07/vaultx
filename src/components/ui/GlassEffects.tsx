@@ -3,18 +3,40 @@
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-export function GlassSphere({ className, delay = 0 }: { className?: string; delay?: number }) {
+export function GlassSphere({
+  className,
+  delay = 0,
+  opacity = 0.1,
+}: {
+  className?: string;
+  delay?: number;
+  opacity?: number;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.8 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 1.5, delay, ease: "easeOut" }}
+      animate={{
+        opacity: [0, opacity],
+        scale: [0.8, 1],
+        y: [0, -20, 0],
+      }}
+      transition={{
+        opacity: { duration: 1.5, delay },
+        scale: { duration: 1.5, delay },
+        y: {
+          duration: 10,
+          repeat: Infinity,
+          ease: "easeInOut",
+          delay,
+        },
+      }}
       className={cn(
-        "absolute rounded-full bg-gradient-to-br from-white/20 to-transparent backdrop-blur-3xl",
-        className
+        "absolute rounded-full bg-gradient-to-br from-white/10 via-white/5 to-transparent backdrop-blur-3xl border border-white/10",
+        className,
       )}
       style={{
-        boxShadow: "inset -20px -20px 50px rgba(0,0,0,0.5), inset 20px 20px 50px rgba(255,255,255,0.5), 0 0 50px rgba(16, 185, 129, 0.3)",
+        boxShadow:
+          "inset -10px -10px 30px rgba(0,0,0,0.3), inset 10px 10px 30px rgba(255,255,255,0.1), 0 0 80px rgba(16, 185, 129, 0.1)",
       }}
     />
   );

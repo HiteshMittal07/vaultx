@@ -1,12 +1,12 @@
 "use client";
 
-import { Dashboard } from "@/components/dashboard/Dashboard";
+import { BorrowDashboard } from "@/components/borrow/BorrowDashboard";
 import { AuthPageWrapper } from "@/components/layout/AuthPageWrapper";
 
-export default function DashboardPage() {
+export default function BorrowPage() {
   return (
     <AuthPageWrapper>
-      <Dashboard />
+      <BorrowDashboard />
     </AuthPageWrapper>
   );
 }
