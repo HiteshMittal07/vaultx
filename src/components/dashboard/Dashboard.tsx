@@ -2,13 +2,7 @@
 
 import { motion } from "framer-motion";
 import Image from "next/image";
-import {
-  ArrowRight,
-  Wallet,
-  TrendingUp,
-  HandCoins,
-  RefreshCw,
-} from "lucide-react";
+import { ArrowRight, Wallet, HandCoins, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 import { useWallets } from "@privy-io/react-auth";
@@ -50,7 +44,6 @@ export function Dashboard() {
     USDT0: number;
   }>({ XAUt0: 0, USDT0: 1 });
 
-  // Load history
   useEffect(() => {
     if (!address) return;
     const saved = localStorage.getItem(`vaultx_history_${address}`);
@@ -152,9 +145,7 @@ export function Dashboard() {
   return (
     <div className="w-full max-w-7xl mx-auto space-y-8">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Overview, Net Worth, Actions */}
         <div className="lg:col-span-2 space-y-8">
-          {/* Header Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

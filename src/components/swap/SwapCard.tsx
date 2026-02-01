@@ -103,7 +103,6 @@ export function SwapCard() {
     USDT0: number;
   }>({ XAUt0: 0, USDT0: 1 });
 
-  // Load history from localStorage
   useEffect(() => {
     if (!address) return;
     const saved = localStorage.getItem(`vaultx_history_${address}`);
@@ -139,7 +138,6 @@ export function SwapCard() {
     return () => clearInterval(interval);
   }, [fetchPrices]);
 
-  // Save history to localStorage
   useEffect(() => {
     if (address && history.length > 0) {
       localStorage.setItem(
@@ -196,26 +194,17 @@ export function SwapCard() {
     }
   }, [address, tokenIn, tokenOut]);
 
-  /**
-   * Checks if input exceeds balance
-   */
   const isInsufficientBalance = !!(
     sellAmount &&
     Number(sellAmount) > 0 &&
     parseUnits(sellAmount, tokenIn.decimals) > rawBalanceIn
   );
 
-  /**
-   * Sets sell amount to full balance
-   */
   const setMaxBalance = () => {
     const formatted = formatUnits(rawBalanceIn, tokenIn.decimals);
     setSellAmount(formatted);
   };
 
-  /**
-   * Fetches the quote from Uniswap V3 Quoter
-   */
   const fetchQuote = useCallback(
     async (amount: string) => {
       const inputVal = Number(amount);
