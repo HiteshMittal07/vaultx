@@ -42,11 +42,11 @@ import {
   SWAP_ROUTER_02,
   BICONOMY_NEXUS_V1_2_0,
 } from "@/constants/addresses";
-import { LOGOS, DEFAULT_FEE, arbitrum } from "@/constants/config";
-import { getTokenBalances } from "@/lib/blockchain/utils";
+import { LOGOS, DEFAULT_FEE, arbitrum, APP_CONFIG } from "@/constants/config";
+import { getTokenBalances, getLatestPythPrice } from "@/lib/blockchain/utils";
 
 type TokenInfo = {
-  symbol: "USDT0" | "XAUT0";
+  symbol: "USDT0" | "XAUt0";
   address: `0x${string}`;
   decimals: number;
 };
@@ -65,7 +65,7 @@ export function SwapCard() {
     decimals: 6,
   });
   const [tokenOut, setTokenOut] = useState<TokenInfo>({
-    symbol: "XAUT0",
+    symbol: "XAUt0",
     address: XAUT0,
     decimals: 6,
   });
@@ -98,25 +98,56 @@ export function SwapCard() {
   const [slippage, setSlippage] = useState("5.0"); // 5% default
   const [deadlineMinutes, setDeadlineMinutes] = useState("30"); // 30 min default
   const [history, setHistory] = useState<any[]>([]);
+  const [pythPrices, setPythPrices] = useState<{
+    XAUt0: number;
+    USDT0: number;
+  }>({ XAUt0: 0, USDT0: 1 });
 
   // Load history from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem("vaultx_history");
+    if (!address) return;
+    const saved = localStorage.getItem(`vaultx_history_${address}`);
     if (saved) {
       try {
         setHistory(JSON.parse(saved));
       } catch (e) {
         console.error("Failed to load history:", e);
       }
+    } else {
+      setHistory([]);
+    }
+  }, [address]);
+
+  // Fetch Pyth Prices
+  const fetchPrices = useCallback(async () => {
+    try {
+      const [pXAUT, pUSDT] = await Promise.all([
+        getLatestPythPrice(APP_CONFIG.pythPriceFeedIds.XAUt0),
+        getLatestPythPrice(APP_CONFIG.pythPriceFeedIds.USDT0),
+      ]);
+      if (pXAUT > 0 && pUSDT > 0) {
+        setPythPrices({ XAUt0: pXAUT, USDT0: pUSDT });
+      }
+    } catch (err) {
+      console.error("Failed to fetch Pyth prices:", err);
     }
   }, []);
 
+  useEffect(() => {
+    fetchPrices();
+    const interval = setInterval(fetchPrices, 30000); // Update every 30s
+    return () => clearInterval(interval);
+  }, [fetchPrices]);
+
   // Save history to localStorage
   useEffect(() => {
-    if (history.length > 0) {
-      localStorage.setItem("vaultx_history", JSON.stringify(history));
+    if (address && history.length > 0) {
+      localStorage.setItem(
+        `vaultx_history_${address}`,
+        JSON.stringify(history),
+      );
     }
-  }, [history]);
+  }, [history, address]);
 
   /**
    * Fetches user balances for both tokens
@@ -133,16 +164,32 @@ export function SwapCard() {
       setRawBalanceOut(bOut);
 
       setBalanceIn(
-        Number(formatUnits(bIn, tokenIn.decimals)).toLocaleString(undefined, {
-          minimumFractionDigits: 3,
-          maximumFractionDigits: 5,
-        }),
+        tokenIn.symbol === "XAUt0"
+          ? Number(formatUnits(bIn, tokenIn.decimals)) < 0.0001 &&
+            Number(formatUnits(bIn, tokenIn.decimals)) > 0
+            ? "< 0.0001"
+            : Number(formatUnits(bIn, tokenIn.decimals)).toFixed(4)
+          : Number(formatUnits(bIn, tokenIn.decimals)).toLocaleString(
+              undefined,
+              {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              },
+            ),
       );
       setBalanceOut(
-        Number(formatUnits(bOut, tokenOut.decimals)).toLocaleString(undefined, {
-          minimumFractionDigits: 3,
-          maximumFractionDigits: 5,
-        }),
+        tokenOut.symbol === "XAUt0"
+          ? Number(formatUnits(bOut, tokenOut.decimals)) < 0.0001 &&
+            Number(formatUnits(bOut, tokenOut.decimals)) > 0
+            ? "< 0.0001"
+            : Number(formatUnits(bOut, tokenOut.decimals)).toFixed(4)
+          : Number(formatUnits(bOut, tokenOut.decimals)).toLocaleString(
+              undefined,
+              {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              },
+            ),
       );
     } catch (err) {
       console.error("Balance fetch error:", err);
@@ -234,7 +281,7 @@ export function SwapCard() {
           {
             contractAddress: BICONOMY_NEXUS_V1_2_0,
             chainId: arbitrum.id,
-            nonce: 1,
+            nonce: 0,
           },
           { address: address as Address },
         );
@@ -450,7 +497,17 @@ export function SwapCard() {
                         <input
                           type="number"
                           value={slippage}
-                          onChange={(e) => setSlippage(e.target.value)}
+                          min="0.1"
+                          max="50"
+                          step="0.1"
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            if (isNaN(val)) setSlippage("");
+                            else
+                              setSlippage(
+                                Math.min(50, Math.max(0, val)).toString(),
+                              );
+                          }}
                           className="w-16 bg-white/5 rounded-lg px-2 py-1 text-right text-xs font-mono text-emerald-400 outline-none border border-white/5 focus:border-emerald-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                         <span className="ml-1 text-[10px] text-zinc-500">
@@ -458,6 +515,11 @@ export function SwapCard() {
                         </span>
                       </div>
                     </div>
+                    {Number(slippage) > 5 && (
+                      <p className="text-[9px] font-medium text-amber-500 bg-amber-500/10 px-2 py-1 rounded-md text-center">
+                        ⚠️ High slippage may result in unfavorable rates
+                      </p>
+                    )}
 
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
@@ -467,7 +529,16 @@ export function SwapCard() {
                         <input
                           type="number"
                           value={deadlineMinutes}
-                          onChange={(e) => setDeadlineMinutes(e.target.value)}
+                          min="1"
+                          max="4320"
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            if (isNaN(val)) setDeadlineMinutes("");
+                            else
+                              setDeadlineMinutes(
+                                Math.min(4320, Math.max(1, val)).toString(),
+                              );
+                          }}
                           className="w-16 bg-white/5 rounded-lg px-2 py-1 text-right text-xs font-mono text-emerald-400 outline-none border border-white/5 focus:border-emerald-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                         <span className="ml-1 text-[10px] text-zinc-500">
@@ -507,7 +578,7 @@ export function SwapCard() {
                 <span
                   className={`font-mono text-[11px] transition-colors ${isInsufficientBalance ? "text-red-400" : "text-zinc-600"}`}
                 >
-                  Balance: {balanceIn}
+                  Balance: {balanceIn} {tokenIn.symbol}
                 </span>
                 <button
                   onClick={setMaxBalance}
@@ -524,7 +595,7 @@ export function SwapCard() {
                 placeholder="0"
                 value={sellAmount}
                 onChange={(e) => setSellAmount(e.target.value)}
-                className={`w-full bg-transparent text-4xl font-semibold placeholder-zinc-800 outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isInsufficientBalance ? "text-red-400" : "text-white"}`}
+                className={`w-full bg-transparent text-3xl md:text-4xl font-semibold placeholder-zinc-800 outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isInsufficientBalance ? "text-red-400" : "text-white"}`}
               />
               <div className="flex shrink-0 items-center gap-2 rounded-2xl bg-white/5 px-4 py-2 hover:bg-white/10 transition-all border border-white/5 group/asset cursor-pointer">
                 <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white p-0.5 shadow-xl">
@@ -565,7 +636,7 @@ export function SwapCard() {
               </span>
               <div className="flex items-center gap-2">
                 <span className="text-zinc-600 font-mono text-[11px]">
-                  Balance: {balanceOut}
+                  Balance: {balanceOut} {tokenOut.symbol}
                 </span>
                 <AnimatePresence>
                   {isQuoting && (
@@ -582,7 +653,7 @@ export function SwapCard() {
             </div>
 
             <div className="flex items-center justify-between gap-4">
-              <div className="w-full overflow-hidden text-ellipsis whitespace-nowrap text-4xl font-semibold text-white/90">
+              <div className="w-full overflow-hidden text-ellipsis whitespace-nowrap text-3xl md:text-4xl font-semibold text-white/90">
                 {buyAmount || (isQuoting ? "..." : "0")}
               </div>
               <div className="flex shrink-0 items-center gap-2 rounded-2xl bg-white/5 px-4 py-2 hover:bg-white/10 transition-all border border-white/5 group/asset cursor-pointer">
@@ -603,7 +674,10 @@ export function SwapCard() {
 
             <div className="mt-3 flex justify-between items-center h-4">
               <span className="text-[11px] text-zinc-600 font-medium">
-                ~$0.00
+                ~$
+                {(Number(sellAmount || 0) * pythPrices[tokenIn.symbol]).toFixed(
+                  2,
+                )}
               </span>
               {error && (
                 <span className="text-[10px] font-bold text-red-400/80 uppercase tracking-widest">
@@ -667,7 +741,13 @@ export function SwapCard() {
                   : "0.00"}{" "}
                 {tokenOut.symbol}
               </span>
-              <span className="text-zinc-600">($1.00)</span>
+              <span className="text-zinc-600">
+                ($
+                {pythPrices[tokenIn.symbol].toLocaleString(undefined, {
+                  maximumFractionDigits: 2,
+                })}
+                )
+              </span>
             </div>
             <div className="flex items-center gap-2 text-zinc-400 group-hover:text-white transition-colors">
               <Fuel className="h-3.5 w-3.5" />

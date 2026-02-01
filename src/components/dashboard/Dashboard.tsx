@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Image from "next/image";
 import {
   ArrowRight,
   Wallet,
@@ -12,17 +13,18 @@ import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 import { useWallets } from "@privy-io/react-auth";
 import { DepositSection } from "./DepositSection";
+import { cn } from "@/lib/utils";
 import { formatUnits, Address } from "viem";
 import { publicClient } from "@/lib/blockchain/client";
 import { USDT0 } from "@/constants/addresses";
+import { LOGOS, APP_CONFIG } from "@/constants/config";
 import {
   getTokenBalance,
   getMorphoMarketData,
   getOraclePrice,
   calculateBorrowAssets,
+  getLatestPythPrice,
 } from "@/lib/blockchain/utils";
-import Image from "next/image";
-import { LOGOS } from "@/constants/config";
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState<"positions" | "history">(
@@ -41,19 +43,27 @@ export function Dashboard() {
     collateral: number;
     borrow: number;
     oraclePrice: number;
+    lltv: number;
   } | null>(null);
+  const [pythPrices, setPythPrices] = useState<{
+    XAUt0: number;
+    USDT0: number;
+  }>({ XAUt0: 0, USDT0: 1 });
 
   // Load history
   useEffect(() => {
-    const saved = localStorage.getItem("vaultx_history");
+    if (!address) return;
+    const saved = localStorage.getItem(`vaultx_history_${address}`);
     if (saved) {
       try {
         setHistory(JSON.parse(saved));
       } catch (e) {
         console.error("Failed to load history:", e);
       }
+    } else {
+      setHistory([]);
     }
-  }, []);
+  }, [address]);
 
   const fetchData = useCallback(async () => {
     if (!address) return;
@@ -91,14 +101,29 @@ export function Dashboard() {
             )
           : 0;
 
+      const lltv =
+        params && params.length >= 5
+          ? Number(formatUnits((params as any)[4] as bigint, 18)) * 100
+          : 0;
+
       if (collateral > 0 || borrowAssets > 0) {
         setPositionData({
           collateral,
           borrow: borrowAssets,
           oraclePrice: oPrice,
+          lltv,
         });
       } else {
         setPositionData(null);
+      }
+
+      // 4. Fetch Pyth Prices
+      const [pXAUT, pUSDT] = await Promise.all([
+        getLatestPythPrice(APP_CONFIG.pythPriceFeedIds.XAUt0),
+        getLatestPythPrice(APP_CONFIG.pythPriceFeedIds.USDT0),
+      ]);
+      if (pXAUT > 0 && pUSDT > 0) {
+        setPythPrices({ XAUt0: pXAUT, USDT0: pUSDT });
       }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -135,9 +160,11 @@ export function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             className="flex items-end justify-between"
           >
-            <div>
-              <h1 className="text-4xl font-bold text-white mb-2">Overview</h1>
-              <p className="text-zinc-400">
+            <div className="px-4 sm:px-0">
+              <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">
+                Overview
+              </h1>
+              <p className="text-sm sm:text-base text-zinc-400">
                 Manage your positions and track your performance.
               </p>
             </div>
@@ -169,17 +196,18 @@ export function Dashboard() {
                   />
                 </button>
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-5xl font-bold text-white">
-                  ${balance}
-                </span>
-                <span className="text-sm font-medium text-emerald-400 flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3" /> +0.00%
+              <div className="flex items-baseline flex-wrap gap-2">
+                <span className="text-3xl sm:text-5xl font-bold text-white">
+                  $
+                  {(
+                    Number(balance.replace(/,/g, "")) * pythPrices.USDT0
+                  ).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
                 </span>
               </div>
-              <p className="text-xs text-zinc-500 mt-2">
-                Combined balance of USDT0 and XAUT0 positions
-              </p>
+              <p className="text-xs text-zinc-500 mt-2">USDT0 Balance</p>
             </div>
           </motion.div>
 
@@ -204,7 +232,7 @@ export function Dashboard() {
                       Swap Tokens
                     </h3>
                     <p className="text-sm text-zinc-400">
-                      Instant decentralized token swaps. Trade XAUT0/USDT.
+                      Instant decentralized token swaps. Trade XAUt0/USDT.
                     </p>
                   </div>
                 </div>
@@ -293,14 +321,14 @@ export function Dashboard() {
                     </div>
                     <div>
                       <h4 className="text-sm font-medium text-white">
-                        XAUT / USDT Market
+                        XAUt0 / USDT0 Market
                       </h4>
                       <p className="text-[10px] text-zinc-500 uppercase tracking-widest">
                         Morpho Blue Position
                       </p>
                     </div>
                   </div>
-                  <Link href="/borrow">
+                  <Link href="/borrow?tab=position">
                     <button className="text-xs text-emerald-500 font-bold hover:underline">
                       Manage
                     </button>
@@ -312,13 +340,13 @@ export function Dashboard() {
                       Collateral
                     </p>
                     <p className="text-xl font-bold text-white">
-                      {positionData.collateral.toFixed(6)} XAUT
+                      {positionData.collateral < 0.0001
+                        ? "< 0.0001"
+                        : positionData.collateral.toFixed(4)}{" "}
+                      XAUt0
                     </p>
                     <p className="text-xs text-zinc-500">
-                      $
-                      {(
-                        positionData.collateral * positionData.oraclePrice
-                      ).toFixed(2)}
+                      ${(positionData.collateral * pythPrices.XAUt0).toFixed(2)}
                     </p>
                   </div>
                   <div>
@@ -328,8 +356,23 @@ export function Dashboard() {
                     <p className="text-xl font-bold text-white">
                       {positionData.borrow.toFixed(2)} USDT
                     </p>
-                    <p className="text-xs text-zinc-500">
-                      LTV:{" "}
+                    <p
+                      className={cn(
+                        "text-xl font-bold transition-colors",
+                        (() => {
+                          const ltv =
+                            (positionData.borrow /
+                              (positionData.collateral *
+                                positionData.oraclePrice)) *
+                            100;
+                          if (ltv >= positionData.lltv * 0.95)
+                            return "text-red-400";
+                          if (ltv >= positionData.lltv * 0.9)
+                            return "text-amber-400";
+                          return "text-white";
+                        })(),
+                      )}
+                    >
                       {(
                         (positionData.borrow /
                           (positionData.collateral *
