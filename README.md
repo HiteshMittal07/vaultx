@@ -4,15 +4,15 @@
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
-### 🔐 Seamless Authentication & Smart Wallets
+### Seamless Authentication & Smart Wallets
 
 - **Email-Based Login**: Powered by **[Privy](https://www.privy.io/)**, allowing users to onboard instantly without needing a pre-existing Web3 wallet.
 - **Smart Accounts**: Integrates **[Biconomy Nexus](https://biconomy.io/)** (EIP-7702) to upgrade user accounts into smart wallets.
 - **Gasless Transactions**: All interactions are gas-sponsored via a custom backend relay, removing the barrier of holding ETH for fees.
 
-### 💰 Core DeFi Capabilities
+### Core DeFi Capabilities
 
 - **One-Click Swaps**: Integrated **Uniswap V3** Universal Router for efficient, atomic swaps between USDT and XAUt0.
 - **Lending & Borrowing**: Direct integration with **[Morpho Blue](https://morpho.org/)** on Arbitrum (XAUt0/USDT0 market).
@@ -21,13 +21,13 @@
   - **Auto-Calculated Max**: Smart "MAX" buttons for Repay and Withdraw that handle collateral precision (6 decimals) and prevent dust.
   - **Safety Guards**: Prevents over-repayment and under-collateralized borrowing attempts.
 
-### ⚡ Real-Time Data through Oracles
+### Real-Time Data through Oracles
 
 - **Pyth Network**: Fetches sub-second price updates for XAUt and USDT to ensure accurate portfolio valuation and liquidation risk assessment.
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 
 - **Framework**: [Next.js 16](https://nextjs.org/) (App Router)
 - **Language**: TypeScript / React 19
@@ -41,7 +41,45 @@
 
 ---
 
-## 🏗 Architecture
+## Code Architecture
+
+The codebase is organized to separate UI concerns from blockchain logic and backend services.
+
+### Directory Structure
+
+- **`src/app/`**: Next.js App Router pages and layouts.
+  - `dashboard/`: Main user dashboard page.
+  - `borrow/`: Borrowing market interface.
+  - `swap/`: Token swap interface.
+  - `api/`: Server-side API routes (e.g., for AA relay).
+
+- **`src/components/`**: Reusable UI components.
+  - **`borrow/`**: Logic for the lending/borrowing market.
+    - `BorrowDashboard.tsx`: Main controller component for state and data fetching.
+    - `SidebarActions.tsx`: Handles user input and transaction submission (Supply/Borrow/Repay/Withdraw).
+    - `tabs/`: Modularized tab contents (Overview, Position, Activity).
+    - `components/`: Shared localized components (MetricStat, RiskCard).
+  - **`swap/`**: Swap interface components.
+    - `SwapCard.tsx`: Handles Uniswap V3 interaction, quoting, and executing swaps.
+  - **`dashboard/`**: Components for the main portfolio dashboard view.
+
+- **`src/services/`**: Backend business logic.
+  - **`account-abstraction/`**: Handles Smart Account logic.
+    - `index.ts`: Service for preparing and executing EIP-7702 UserOperations.
+    - Uses Biconomy Nexus and custombundler logic for gas sponsorship.
+
+- **`src/lib/`**: Shared utilities.
+  - **`blockchain/`**: Blockchain-specific helpers.
+    - `client.ts`: Viem publicClient configuration.
+    - `utils.ts`: Helper functions for fetching token balances, Morpho market data, and Pyth prices.
+
+- **`src/constants/`**:
+  - `abis.ts`: Contract ABIs (ERC20, Morpho, etc.).
+  - `addresses.ts`: Contract addresses for Arbitrum.
+
+---
+
+## Architecture Flow
 
 The application uses a hybrid architecture to ensure a Web2-like experience on Web3 rails:
 
@@ -51,7 +89,7 @@ The application uses a hybrid architecture to ensure a Web2-like experience on W
 
 ---
 
-## 📦 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -96,6 +134,6 @@ The application uses a hybrid architecture to ensure a Web2-like experience on W
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License.
