@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Info,
   ExternalLink,
@@ -44,12 +45,14 @@ import {
   MARKET_ID,
   BICONOMY_NEXUS_V1_2_0,
 } from "@/constants/addresses";
-import { LOGOS, arbitrum } from "@/constants/config";
+import { LOGOS, arbitrum, APP_CONFIG } from "@/constants/config";
 import {
   getTokenBalances,
   getMorphoMarketData,
   getBorrowRate,
   getOraclePrice,
+  getLatestPythPrice,
+  getMorphoUserPosition,
 } from "@/lib/blockchain/utils";
 
 export function BorrowDashboard() {
@@ -63,30 +66,47 @@ export function BorrowDashboard() {
   const [borrowAmount, setBorrowAmount] = useState("");
   const [repayAmount, setRepayAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [sidebarMode, setSidebarMode] = useState<"borrow" | "repay">("borrow");
   const [repayMax, setRepayMax] = useState(false);
+  const [withdrawMax, setWithdrawMax] = useState(false);
 
-  const [activeTab, setActiveTab] = useState("Your Position");
+  const [activeTab, setActiveTab] = useState("Overview");
   const [actionType, setActionType] = useState<"borrow" | "repay">("borrow");
   const [history, setHistory] = useState<any[]>([]);
 
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+
+  useEffect(() => {
+    if (tabParam === "position") {
+      setActiveTab("Your Position");
+    }
+  }, [tabParam]);
+
   // Load history from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem("vaultx_history");
+    if (!address) return;
+    const saved = localStorage.getItem(`vaultx_history_${address}`);
     if (saved) {
       try {
         setHistory(JSON.parse(saved));
       } catch (e) {
         console.error("Failed to load history:", e);
       }
+    } else {
+      setHistory([]); // Clear history if no data for this address
     }
-  }, []);
+  }, [address]);
 
   // Save history to localStorage
   useEffect(() => {
-    if (history.length > 0) {
-      localStorage.setItem("vaultx_history", JSON.stringify(history));
+    if (address && history.length > 0) {
+      localStorage.setItem(
+        `vaultx_history_${address}`,
+        JSON.stringify(history),
+      );
     }
-  }, [history]);
+  }, [history, address]);
 
   const [executingAction, setExecutingAction] = useState<string | null>(null);
   const isExecuting = executingAction !== null;
@@ -105,6 +125,10 @@ export function BorrowDashboard() {
   const [balances, setBalances] = useState({ loan: "0", collateral: "0" });
   const [borrowRate, setBorrowRate] = useState<string>("0.00");
   const [oraclePrice, setOraclePrice] = useState<number>(0);
+  const [pythPrices, setPythPrices] = useState<{
+    XAUt0: number;
+    USDT0: number;
+  }>({ XAUt0: 0, USDT0: 1 });
   const [marketIdCopied, setMarketIdCopied] = useState(false);
 
   const handleCopyMarketId = () => {
@@ -142,6 +166,15 @@ export function BorrowDashboard() {
         const price = await getOraclePrice(params);
         setOraclePrice(price);
       }
+
+      // Fetch Pyth Prices
+      const [pXAUT, pUSDT] = await Promise.all([
+        getLatestPythPrice(APP_CONFIG.pythPriceFeedIds.XAUt0),
+        getLatestPythPrice(APP_CONFIG.pythPriceFeedIds.USDT0),
+      ]);
+      if (pXAUT > 0 && pUSDT > 0) {
+        setPythPrices({ XAUt0: pXAUT, USDT0: pUSDT });
+      }
     } catch (err) {
       console.error("Error fetching borrow data:", err);
       setError("Failed to fetch market data");
@@ -159,6 +192,8 @@ export function BorrowDashboard() {
     setBorrowAmount("");
     setRepayAmount("");
     setWithdrawAmount("");
+    setRepayMax(false);
+    setWithdrawMax(false);
     setNotification(null);
   }, [activeTab]);
 
@@ -170,6 +205,7 @@ export function BorrowDashboard() {
     type?: "borrow" | "repay";
     actionId?: string;
     repayMax?: boolean;
+    withdrawMax?: boolean;
   }) => {
     if (!address || !marketParams) return;
     const actionId = overrides?.actionId ?? "main";
@@ -181,6 +217,7 @@ export function BorrowDashboard() {
     const wAmt = overrides?.withdraw ?? withdrawAmount;
     const aType = overrides?.type ?? actionType;
     const isRepayMax = overrides?.repayMax ?? repayMax;
+    const isWithdrawMax = overrides?.withdrawMax ?? withdrawMax;
 
     try {
       const calls: Call[] = [];
@@ -230,15 +267,14 @@ export function BorrowDashboard() {
 
       // 3. Repay
       if (aType === "repay" && rAmt && Number(rAmt) > 0) {
-        const parsedRepay = isRepayMax
+        const approvalAmount = isRepayMax
           ? BigInt(
               "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             )
           : parseUnits(rAmt, 6);
+        const assetsToRepay = isRepayMax ? BigInt(0) : parseUnits(rAmt, 6);
         const sharesToRepay = isRepayMax
-          ? BigInt(
-              "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-            )
+          ? BigInt(userPosition?.[1] || 0)
           : BigInt(0);
 
         calls.push({
@@ -246,7 +282,7 @@ export function BorrowDashboard() {
           data: encodeFunctionData({
             abi: ERC20_ABI,
             functionName: "approve",
-            args: [MORPHO_ADDRESS, parsedRepay],
+            args: [MORPHO_ADDRESS, approvalAmount],
           }),
           value: BigInt(0),
         });
@@ -257,7 +293,7 @@ export function BorrowDashboard() {
             functionName: "repay",
             args: [
               marketParams,
-              BigInt(0),
+              assetsToRepay,
               sharesToRepay,
               address as Address,
               "0x",
@@ -269,7 +305,9 @@ export function BorrowDashboard() {
 
       // 4. Withdraw Collateral
       if (wAmt && Number(wAmt) > 0) {
-        const parsedWithdraw = parseUnits(wAmt, 6);
+        const parsedWithdraw = isWithdrawMax
+          ? BigInt(userPosition?.[2] || 0)
+          : parseUnits(wAmt, 6);
         calls.push({
           to: MORPHO_ADDRESS as Address,
           data: encodeFunctionData({
@@ -299,7 +337,7 @@ export function BorrowDashboard() {
           {
             contractAddress: BICONOMY_NEXUS_V1_2_0,
             chainId: arbitrum.id,
-            nonce: 1,
+            nonce: 0,
           },
           { address: address as Address },
         );
@@ -383,7 +421,18 @@ export function BorrowDashboard() {
       setRepayAmount("");
       setWithdrawAmount("");
       setRepayMax(false);
-      fetchData();
+      setWithdrawMax(false);
+      if (sidebarMode === "repay") {
+        const position = await getMorphoUserPosition(
+          address as Address,
+          MARKET_ID,
+        );
+        if (position?.[1] === BigInt(0) && position?.[2] === BigInt(0)) {
+          setSidebarMode("borrow");
+          setActionType("borrow");
+        }
+      }
+      await fetchData();
     } catch (err: any) {
       console.error("Borrow execution failed:", err);
       setNotification({
@@ -450,9 +499,7 @@ export function BorrowDashboard() {
   const projectedLTV =
     projectedCollateral > 0 && oraclePrice > 0
       ? (projectedBorrow / (projectedCollateral * oraclePrice)) * 100
-      : projectedBorrow > 0
-        ? 1000
-        : 0;
+      : 0;
 
   const maxWithdrawable =
     userBorrow > 0 && oraclePrice > 0 && lltv > 0
@@ -481,11 +528,11 @@ export function BorrowDashboard() {
               <Image src={LOGOS.USDT0} alt="USDT0" width={48} height={48} />
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white z-0 border-4 border-[#050505] overflow-hidden">
-              <Image src={LOGOS.XAUT0} alt="XAUT0" width={48} height={48} />
+              <Image src={LOGOS.XAUt0} alt="XAUt0" width={48} height={48} />
             </div>
           </div>
-          <h1 className="text-4xl font-light text-white">
-            XAUT0 <span className="text-zinc-500">/</span> USDT0
+          <h1 className="text-2xl sm:text-4xl font-light text-white">
+            XAUt0 <span className="text-zinc-500">/</span> USDT0
           </h1>
           <button
             onClick={handleCopyMarketId}
@@ -499,40 +546,30 @@ export function BorrowDashboard() {
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-8">
-          <div>
-            <div className="flex items-center gap-1 text-zinc-500 text-sm mb-1">
-              Total Market Size <Info className="h-3 w-3" />
-            </div>
-            <div className="text-3xl font-medium text-white">
-              {isLoading ? "..." : `$${totalMarketSize.toFixed(2)}`}
-            </div>
-            <div className="text-sm text-zinc-500">
-              {isLoading ? "..." : `${totalMarketSize.toFixed(2)} USDT0`}
-            </div>
-          </div>
-          <div>
-            <div className="flex items-center gap-1 text-zinc-500 text-sm mb-1">
-              Total Liquidity <Info className="h-3 w-3" />
-            </div>
-            <div className="text-3xl font-medium text-white">
-              {isLoading ? "..." : `$${totalLiquidity.toFixed(2)}`}
-            </div>
-            <div className="text-sm text-zinc-500">
-              {isLoading ? "..." : `${totalLiquidity.toFixed(2)} USDT0`}
-            </div>
-          </div>
-          <div>
-            <div className="flex items-center gap-1 text-zinc-500 text-sm mb-1">
-              Rate <Info className="h-3 w-3" />
-            </div>
-            <div className="text-3xl font-medium text-white">
-              {isLoading ? "..." : `${borrowRate}%`}
-            </div>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8">
+          <MetricStat
+            label="Total Market Size"
+            value={`$${(totalMarketSize * (pythPrices.USDT0 || 1)).toFixed(2)}`}
+            subValue={`${totalMarketSize.toFixed(2)} USDT0`}
+            isLoading={isLoading}
+            info="The total value of all assets deposited as collateral in this specific market."
+          />
+          <MetricStat
+            label="Available Liquidity"
+            value={`$${(totalLiquidity * (pythPrices.USDT0 || 1)).toFixed(2)}`}
+            subValue={`${totalLiquidity.toFixed(2)} USDT0`}
+            isLoading={isLoading}
+            info="The amount of USDT0 currently available in the pool for borrowing."
+          />
+          <MetricStat
+            label="APR"
+            value={`${borrowRate}%`}
+            isLoading={isLoading}
+            info="The current annualized percentage rate for borrowing USDT0. This rate is variable and based on market utilization."
+          />
         </div>
 
-        <div className="flex gap-8 border-b border-zinc-800 pb-4">
+        <div className="flex gap-6 sm:gap-8 border-b border-zinc-800 pb-4 overflow-x-auto scrollbar-hide">
           {["Your Position", "Overview", "Activity"].map((tab) => (
             <button
               key={tab}
@@ -550,24 +587,27 @@ export function BorrowDashboard() {
         </div>
 
         {activeTab === "Your Position" && (
-          <div className="space-y-12">
-            <div className="grid grid-cols-2 gap-x-20 gap-y-10 pt-4">
+          <div className="space-y-8 sm:space-y-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-20 gap-y-10 pt-4">
               {/* Left Column Stats */}
               <div className="space-y-6">
                 <div className="flex justify-between items-center border-b border-zinc-800/50 pb-4">
                   <span className="text-zinc-400 text-sm">Collateral</span>
                   <div className="flex items-center gap-2">
                     <Image
-                      src={LOGOS.XAUT0}
-                      alt="XAUT0"
+                      src={LOGOS.XAUt0}
+                      alt="XAUt0"
                       width={16}
                       height={16}
                     />
                     <span className="text-white font-medium">
-                      {userCollateral.toFixed(6)} XAUT0
+                      {userCollateral < 0.0001
+                        ? "< 0.0001"
+                        : userCollateral.toFixed(4)}{" "}
+                      XAUt0
                     </span>
                     <span className="text-zinc-500 text-xs">
-                      ${(userCollateral * oraclePrice).toFixed(2)}
+                      ${(userCollateral * pythPrices.XAUt0).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -582,6 +622,9 @@ export function BorrowDashboard() {
                     />
                     <span className="text-white font-medium">
                       {userBorrow.toFixed(2)} USDT0
+                    </span>
+                    <span className="text-zinc-500 text-xs">
+                      ${(userBorrow * pythPrices.USDT0).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -639,209 +682,6 @@ export function BorrowDashboard() {
                 </div>
               </div>
             </div>
-
-            {/* Position Management Actions */}
-            <div className="pt-8 border-t border-zinc-800">
-              <h3 className="text-white text-xl font-light mb-6">
-                Manage Position
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Repay Section */}
-                <div className="p-6 rounded-3xl bg-zinc-900/40 border border-white/5 space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-zinc-400 text-sm">Repay Loan</span>
-                    <Image
-                      src={LOGOS.USDT0}
-                      alt="USDT0"
-                      width={16}
-                      height={16}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                    <input
-                      type="number"
-                      placeholder="0"
-                      value={repayAmount}
-                      onChange={(e) => {
-                        setActionType("repay");
-                        setRepayAmount(e.target.value);
-                        setRepayMax(false);
-                      }}
-                      className="bg-transparent text-xl text-white outline-none w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <button
-                      onClick={() => {
-                        setActionType("repay");
-                        setRepayAmount(
-                          Math.min(
-                            Number(balances.loan),
-                            userBorrow,
-                          ).toString(),
-                        );
-                        setRepayMax(true);
-                      }}
-                      className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded cursor-pointer hover:bg-zinc-700 transition-colors"
-                    >
-                      MAX
-                    </button>
-                  </div>
-                  <button
-                    onClick={() =>
-                      handleAction({
-                        type: "repay",
-                        repay: repayAmount,
-                        actionId: "repay",
-                        repayMax: repayMax,
-                      })
-                    }
-                    disabled={
-                      !repayAmount ||
-                      Number(repayAmount) <= 0 ||
-                      isExecuting ||
-                      Number(repayAmount) > Number(balances.loan)
-                    }
-                    className="w-full py-2 bg-white text-black rounded-xl text-sm font-bold disabled:opacity-50 cursor-pointer hover:bg-zinc-100 transition-colors disabled:cursor-not-allowed"
-                  >
-                    {executingAction === "repay" ? (
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Executing...
-                      </div>
-                    ) : Number(repayAmount) > Number(balances.loan) ? (
-                      "Insufficient USDT"
-                    ) : (
-                      "Repay"
-                    )}
-                  </button>
-                </div>
-
-                {/* Add Collateral Section */}
-                <div className="p-6 rounded-3xl bg-zinc-900/40 border border-white/5 space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-zinc-400 text-sm">
-                      Add Collateral
-                    </span>
-                    <Image
-                      src={LOGOS.XAUT0}
-                      alt="XAUT0"
-                      width={16}
-                      height={16}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                    <input
-                      type="number"
-                      placeholder="0"
-                      value={supplyAmount}
-                      onChange={(e) => {
-                        setActionType("borrow"); // Using borrow for supply
-                        setSupplyAmount(e.target.value);
-                      }}
-                      className="bg-transparent text-xl text-white outline-none w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <button
-                      onClick={() => setSupplyAmount(balances.collateral)}
-                      className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded cursor-pointer hover:bg-zinc-700 transition-colors"
-                    >
-                      MAX
-                    </button>
-                  </div>
-                  <button
-                    onClick={() =>
-                      handleAction({
-                        type: "borrow",
-                        supply: supplyAmount,
-                        borrow: "0",
-                        actionId: "add-collateral",
-                      })
-                    }
-                    disabled={
-                      !supplyAmount ||
-                      Number(supplyAmount) <= 0 ||
-                      isExecuting ||
-                      Number(supplyAmount) > Number(balances.collateral)
-                    }
-                    className="w-full py-2 bg-white text-black rounded-xl text-sm font-bold disabled:opacity-50 cursor-pointer"
-                  >
-                    {executingAction === "add-collateral" ? (
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Executing...
-                      </div>
-                    ) : Number(supplyAmount) > Number(balances.collateral) ? (
-                      "Insufficient XAUT"
-                    ) : (
-                      "Add"
-                    )}
-                  </button>
-                </div>
-
-                {/* Withdraw Section */}
-                <div className="p-6 rounded-3xl bg-zinc-900/40 border border-white/5 space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-zinc-400 text-sm">
-                      Withdraw Collateral
-                    </span>
-                    <Image
-                      src={LOGOS.XAUT0}
-                      alt="XAUT0"
-                      width={16}
-                      height={16}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                    <input
-                      type="number"
-                      placeholder="0"
-                      value={withdrawAmount}
-                      onChange={(e) => setWithdrawAmount(e.target.value)}
-                      className="bg-transparent text-xl text-white outline-none w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <button
-                      onClick={() =>
-                        setWithdrawAmount(
-                          userBorrow > 0
-                            ? (maxWithdrawable * 0.999).toFixed(6)
-                            : userCollateral.toFixed(6),
-                        )
-                      }
-                      className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded cursor-pointer"
-                    >
-                      MAX
-                    </button>
-                  </div>
-                  <button
-                    onClick={() =>
-                      handleAction({
-                        withdraw: withdrawAmount,
-                        actionId: "withdraw",
-                      })
-                    }
-                    disabled={
-                      !withdrawAmount ||
-                      Number(withdrawAmount) <= 0 ||
-                      isExecuting ||
-                      Number(withdrawAmount) > userCollateral ||
-                      (projectedLTV > lltv + 0.01 && userBorrow > 0)
-                    }
-                    className="w-full py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-sm font-bold disabled:opacity-50 cursor-pointer hover:bg-emerald-500/20 transition-colors disabled:cursor-not-allowed"
-                  >
-                    {executingAction === "withdraw" ? (
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Executing...
-                      </div>
-                    ) : Number(withdrawAmount) > userCollateral ? (
-                      "Exceeds Collateral"
-                    ) : projectedLTV > lltv + 0.01 ? (
-                      "LTV Limit"
-                    ) : (
-                      "Withdraw"
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
@@ -849,7 +689,7 @@ export function BorrowDashboard() {
           <div className="space-y-6 pt-4">
             <h3 className="text-xl text-white font-light">Your Transactions</h3>
             <div className="rounded-3xl border border-white/5 bg-zinc-900/20 overflow-hidden min-h-[300px]">
-              {history.length === 0 ? (
+              {history.filter((tx) => tx.type !== "swap").length === 0 ? (
                 <div className="flex items-center justify-center h-[300px]">
                   <span className="text-zinc-500 text-sm">
                     No transactions found.
@@ -857,36 +697,39 @@ export function BorrowDashboard() {
                 </div>
               ) : (
                 <div className="w-full">
-                  {history.map((tx, i) => (
-                    <div
-                      key={i}
-                      className="p-4 border-b border-white/5 last:border-b-0 flex items-center justify-between hover:bg-white/5 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                          <RefreshCw className="h-4 w-4 text-emerald-500" />
+                  {history
+                    .filter((tx) => tx.type !== "swap")
+                    .map((tx, i) => (
+                      <div
+                        key={i}
+                        className="p-4 border-b border-white/5 last:border-b-0 flex items-center justify-between hover:bg-white/5 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                            <RefreshCw className="h-4 w-4 text-emerald-500" />
+                          </div>
+                          <div>
+                            <p className="text-white text-sm font-medium capitalize">
+                              {tx.type} Successful
+                            </p>
+                            <p className="text-zinc-500 text-xs">
+                              {tx.timestamp}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-white text-sm font-medium capitalize">
-                            {tx.type} Successful
-                          </p>
-                          <p className="text-zinc-500 text-xs">
-                            {tx.timestamp}
-                          </p>
+                        <div className="text-right">
+                          <a
+                            href={`https://arbiscan.io/tx/${tx.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-emerald-400 text-xs hover:underline flex items-center gap-1"
+                          >
+                            View on Arbiscan{" "}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <a
-                          href={`https://arbiscan.io/tx/${tx.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-emerald-400 text-xs hover:underline flex items-center gap-1"
-                        >
-                          View on Arbiscan <ExternalLink className="h-3 w-3" />
-                        </a>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
             </div>
@@ -902,13 +745,13 @@ export function BorrowDashboard() {
               <div className="grid grid-cols-2 gap-x-20 gap-y-6">
                 <MarketAttribute
                   label="Collateral"
-                  value="XAUT0"
-                  logo={LOGOS.XAUT0}
+                  value="XAUt0"
+                  logo={LOGOS.XAUt0}
                   href={`https://arbiscan.io/address/${XAUT0}`}
                 />
                 <MarketAttribute
                   label="Oracle price"
-                  value={`XAUT0 / USDT0 = ${oraclePrice.toLocaleString(
+                  value={`XAUt0 / USDT0 = ${oraclePrice.toLocaleString(
                     undefined,
                     {
                       minimumFractionDigits: 2,
@@ -932,6 +775,8 @@ export function BorrowDashboard() {
                   label="Liquidation LTV"
                   value={`${lltv.toFixed(0)}%`}
                   simpleValue
+                  hasInfo
+                  infoText="The Loan-to-Value ratio at which your position becomes eligible for liquidation."
                 />
                 <MarketAttribute
                   label="Utilization"
@@ -943,6 +788,8 @@ export function BorrowDashboard() {
                       : "0.00%"
                   }
                   simpleValue
+                  hasInfo
+                  infoText="The percentage of the total pool that is currently being borrowed by all users."
                 />
               </div>
             </div>
@@ -958,7 +805,7 @@ export function BorrowDashboard() {
                 <RiskCard
                   icon={<Scale className="h-4 w-4 text-amber-500" />}
                   title="Liquidation Risk"
-                  description={`If your LTV exceeds ${lltv.toFixed(0)}%, your collateral (XAUT0) can be seized. Maintain a safe margin.`}
+                  description={`If your LTV exceeds ${lltv.toFixed(0)}%, your collateral (XAUt0) can be seized. Maintain a safe margin.`}
                 />
                 <RiskCard
                   icon={<ShieldAlert className="h-4 w-4 text-blue-500" />}
@@ -973,7 +820,7 @@ export function BorrowDashboard() {
                 <RiskCard
                   icon={<Users className="h-4 w-4 text-purple-500" />}
                   title="Counterparty Risk"
-                  description="Exposure to XAUT0 and USDT0. Risks include stablecoin de-pegging."
+                  description="Exposure to XAUt0 and USDT0. Risks include stablecoin de-pegging."
                 />
               </div>
             </div>
@@ -983,176 +830,393 @@ export function BorrowDashboard() {
 
       <div className="lg:col-span-1">
         <div className="rounded-3xl border border-white/10 bg-black/40 p-6 backdrop-blur-xl space-y-6">
-          <div className="flex gap-2">
-            <div className="flex-1 rounded-full py-2 text-sm font-medium bg-zinc-800/80 text-white text-center">
+          {/* Borrow/Repay Toggle */}
+          <div className="flex bg-zinc-950/50 p-1 rounded-2xl border border-white/5">
+            <button
+              onClick={() => {
+                setSidebarMode("borrow");
+                setActionType("borrow");
+              }}
+              className={cn(
+                "flex-1 py-1.5 text-xs font-semibold rounded-xl transition-all",
+                sidebarMode === "borrow"
+                  ? "bg-zinc-800 text-white shadow-xl"
+                  : "text-zinc-500 hover:text-zinc-300",
+              )}
+            >
               Borrow
-            </div>
-          </div>
-
-          {/* Supply Input */}
-          <div className="rounded-2xl bg-zinc-900/50 p-4 space-y-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-zinc-400">Supply Collateral XAUT0</span>
-              <div className="flex items-center gap-1 overflow-hidden rounded-full">
-                <Image src={LOGOS.XAUT0} alt="XAUT0" width={16} height={16} />
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <input
-                type="number"
-                value={supplyAmount}
-                onChange={(e) => {
-                  setActionType("borrow");
-                  setSupplyAmount(e.target.value);
-                }}
-                className="w-full bg-transparent text-2xl font-medium text-white outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                placeholder="0"
-              />
+            </button>
+            {(userCollateral > 0 || userBorrow > 0) && (
               <button
-                onClick={() => setSupplyAmount(balances.collateral)}
-                className="text-xs bg-zinc-800 text-zinc-400 px-2 py-1 rounded hover:bg-zinc-700 hover:text-white cursor-pointer"
-              >
-                MAX
-              </button>
-            </div>
-            <div className="flex justify-between text-xs text-zinc-500">
-              <div className="flex flex-col gap-1">
-                <span>
-                  $
-                  {(Number(supplyAmount || 0) * oraclePrice).toLocaleString(
-                    undefined,
-                    { maximumFractionDigits: 2 },
-                  )}
-                </span>
-                {Number(supplyAmount) > Number(balances.collateral) && (
-                  <span className="text-red-400 font-bold">
-                    Exceeds balance
-                  </span>
-                )}
-              </div>
-              <span
-                className={cn(
-                  Number(supplyAmount) > Number(balances.collateral)
-                    ? "text-red-400"
-                    : "text-zinc-500",
-                )}
-              >
-                Available: {Number(balances.collateral).toFixed(6)} XAUT0
-              </span>
-            </div>
-          </div>
-
-          {/* Borrow Input */}
-          <div className="rounded-2xl bg-zinc-900/50 p-4 space-y-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-zinc-400">Borrow USDT0</span>
-              <div className="flex items-center gap-1 overflow-hidden rounded-full">
-                <Image src={LOGOS.USDT0} alt="USDT0" width={16} height={16} />
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <input
-                type="number"
-                value={borrowAmount}
-                onChange={(e) => {
-                  setActionType("borrow");
-                  setBorrowAmount(e.target.value);
+                onClick={() => {
+                  setSidebarMode("repay");
+                  setActionType("repay");
                 }}
-                className="w-full bg-transparent text-2xl font-medium text-white outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                placeholder="0"
-              />
-              <button
-                onClick={() => setBorrowAmount(totalLiquidity.toString())}
-                className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded cursor-pointer hover:bg-zinc-700 transition-colors"
-              >
-                MAX
-              </button>
-            </div>
-            <div className="flex justify-between text-xs text-zinc-500">
-              <div className="flex flex-col gap-1">
-                <span>${Number(borrowAmount || 0).toLocaleString()}</span>
-                {Number(borrowAmount) > totalLiquidity && (
-                  <span className="text-red-400 font-bold">
-                    Exceeds liquidity
-                  </span>
-                )}
-              </div>
-              <span
                 className={cn(
-                  Number(borrowAmount) > totalLiquidity
-                    ? "text-red-400"
-                    : "text-zinc-500",
+                  "flex-1 py-1.5 text-xs font-semibold rounded-xl transition-all",
+                  sidebarMode === "repay"
+                    ? "bg-zinc-800 text-white shadow-xl"
+                    : "text-zinc-500 hover:text-zinc-300",
                 )}
               >
-                Available: {totalLiquidity.toFixed(2)} USDT0
-              </span>
-            </div>
+                Repay
+              </button>
+            )}
           </div>
 
-          {/* Summary Stats */}
-          <div className="space-y-3 pt-2">
-            <SummaryRow
-              label="Collateral (XAUT0)"
-              value={`${userCollateral.toFixed(6)} → ${projectedCollateral.toFixed(6)}`}
-              logo={LOGOS.XAUT0}
-            />
-            <SummaryRow
-              label="Loan (USDT0)"
-              value={`${userBorrow.toFixed(2)} → ${projectedBorrow.toFixed(2)}`}
-              logo={LOGOS.USDT0}
-            />
-            <div className="flex justify-between text-sm">
-              <span className="text-zinc-400">LTV</span>
-              <div className="flex items-center gap-2">
-                <span className="text-zinc-500">
-                  {currentLTV > 0 ? currentLTV.toFixed(2) : "0"}%
-                </span>
-                <span className="text-zinc-600">→</span>
-                <div className="flex items-center gap-1.5">
+          {sidebarMode === "borrow" ? (
+            <div className="space-y-4">
+              {/* Supply Input */}
+              <div className="rounded-2xl bg-zinc-900/50 p-4 space-y-4">
+                <div className="flex justify-between text-xs items-center">
+                  <span className="text-zinc-400 font-medium">
+                    Supply{" "}
+                    {sidebarMode === "borrow" ? "Collateral" : "to Repay"} XAUt0
+                  </span>
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white overflow-hidden p-0.5">
+                    <Image
+                      src={LOGOS.XAUt0}
+                      alt="XAUt0"
+                      width={16}
+                      height={16}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <input
+                    type="number"
+                    value={supplyAmount}
+                    onChange={(e) => {
+                      setActionType("borrow");
+                      setSupplyAmount(e.target.value);
+                    }}
+                    className="w-full bg-transparent text-3xl font-medium text-white outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none placeholder-zinc-800"
+                    placeholder="0.00"
+                  />
+                  <button
+                    onClick={() => setSupplyAmount(balances.collateral)}
+                    className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded hover:bg-zinc-700 hover:text-white cursor-pointer transition-colors"
+                  >
+                    MAX
+                  </button>
+                </div>
+                <div className="flex justify-between items-center text-[10px]">
+                  <span className="text-zinc-500">
+                    $
+                    {(
+                      Number(supplyAmount || 0) * pythPrices.XAUt0
+                    ).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  </span>
                   <span
                     className={cn(
-                      "font-medium",
-                      isDanger
+                      "font-mono",
+                      Number(supplyAmount) > Number(balances.collateral)
                         ? "text-red-400"
-                        : isAtRisk
-                          ? "text-amber-400"
-                          : "text-emerald-400",
+                        : "text-zinc-600",
                     )}
                   >
-                    {projectedLTV > 0 ? projectedLTV.toFixed(2) : "0"}%
+                    Balance: {Number(balances.collateral).toFixed(4)} XAUt0
+                  </span>
+                </div>
+              </div>
+
+              {/* Borrow Input */}
+              <div className="rounded-2xl bg-zinc-900/50 p-4 space-y-4">
+                <div className="flex justify-between text-xs items-center">
+                  <span className="text-zinc-400 font-medium">
+                    Borrow USDT0
+                  </span>
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white overflow-hidden p-0.5">
+                    <Image
+                      src={LOGOS.USDT0}
+                      alt="USDT0"
+                      width={16}
+                      height={16}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <input
+                    type="number"
+                    value={borrowAmount}
+                    onChange={(e) => {
+                      setActionType("borrow");
+                      setBorrowAmount(e.target.value);
+                    }}
+                    className="w-full bg-transparent text-3xl font-medium text-white outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none placeholder-zinc-800"
+                    placeholder="0.00"
+                  />
+                  <button
+                    onClick={() => setBorrowAmount(totalLiquidity.toString())}
+                    className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded cursor-pointer hover:bg-zinc-700 transition-colors"
+                  >
+                    MAX
+                  </button>
+                </div>
+                <div className="flex justify-between items-center text-[10px]">
+                  <span className="text-zinc-500">
+                    $
+                    {(
+                      Number(borrowAmount || 0) * pythPrices.USDT0
+                    ).toLocaleString()}
+                  </span>
+                  <span
+                    className={cn(
+                      "font-mono",
+                      Number(borrowAmount) > totalLiquidity
+                        ? "text-red-400"
+                        : "text-zinc-600",
+                    )}
+                  >
+                    Available: {totalLiquidity.toFixed(2)} USDT0
                   </span>
                 </div>
               </div>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-zinc-400">Rate</span>
-              <span className="text-white">{borrowRate}%</span>
+          ) : (
+            <div className="space-y-4">
+              {/* Repay Input */}
+              <div className="rounded-2xl bg-zinc-900/50 p-4 space-y-4">
+                <div className="flex justify-between text-xs items-center">
+                  <span className="text-zinc-400 font-medium">
+                    Repay Loan USDT0
+                  </span>
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white overflow-hidden p-0.5">
+                    <Image
+                      src={LOGOS.USDT0}
+                      alt="USDT0"
+                      width={16}
+                      height={16}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <input
+                    type="number"
+                    value={repayAmount}
+                    onChange={(e) => {
+                      setActionType("repay");
+                      setRepayAmount(e.target.value);
+                      setRepayMax(false);
+                    }}
+                    className="w-full bg-transparent text-3xl font-medium text-white outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none placeholder-zinc-800"
+                    placeholder="0.00"
+                  />
+                  <button
+                    onClick={() => {
+                      setActionType("repay");
+                      const canRepayFull = Number(balances.loan) >= userBorrow;
+                      const amount = Math.min(
+                        Number(balances.loan),
+                        userBorrow,
+                      );
+                      setRepayAmount(amount.toFixed(6).replace(/\.?0+$/, ""));
+                      setRepayMax(canRepayFull);
+                    }}
+                    className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded hover:bg-zinc-700 hover:text-white cursor-pointer transition-colors"
+                  >
+                    MAX
+                  </button>
+                </div>
+                <div className="flex justify-between items-center text-[10px]">
+                  <span className="text-zinc-500">
+                    $
+                    {(
+                      Number(repayAmount || 0) * pythPrices.USDT0
+                    ).toLocaleString()}
+                  </span>
+                  <span className="text-zinc-600 font-mono">
+                    Loan: {userBorrow.toFixed(2)} USDT0
+                  </span>
+                </div>
+              </div>
+
+              {/* Withdraw Input */}
+              <div className="rounded-2xl bg-zinc-900/50 p-4 space-y-4">
+                <div className="flex justify-between text-xs items-center">
+                  <span className="text-zinc-400 font-medium">
+                    Withdraw Collateral XAUt0
+                  </span>
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white overflow-hidden p-0.5">
+                    <Image
+                      src={LOGOS.XAUt0}
+                      alt="XAUt0"
+                      width={16}
+                      height={16}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <input
+                    type="number"
+                    value={withdrawAmount}
+                    onChange={(e) => {
+                      setWithdrawAmount(e.target.value);
+                      setWithdrawMax(false);
+                    }}
+                    className="w-full bg-transparent text-3xl font-medium text-white outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none placeholder-zinc-800"
+                    placeholder="0.00"
+                  />
+                  <button
+                    onClick={() => {
+                      const isClosing = repayMax || userBorrow <= 0.01;
+                      const maxW = isClosing
+                        ? userCollateral
+                        : Math.floor(maxWithdrawable * 0.999 * 1e6) / 1e6;
+                      setWithdrawAmount(maxW.toFixed(6).replace(/\.?0+$/, ""));
+                      setWithdrawMax(isClosing);
+                    }}
+                    className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded hover:bg-zinc-700 hover:text-white cursor-pointer transition-colors"
+                  >
+                    MAX
+                  </button>
+                </div>
+                <div className="flex justify-between items-center text-[10px]">
+                  <span className="text-zinc-500">
+                    $
+                    {(
+                      Number(withdrawAmount || 0) * pythPrices.XAUt0
+                    ).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-zinc-600 font-mono">
+                    {userCollateral < 0.0001
+                      ? "< 0.0001"
+                      : userCollateral.toFixed(4)}{" "}
+                    XAUt0
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Position Summary - Reimagined for Side Panel */}
+          <div className="rounded-2xl bg-zinc-900/20 border border-white/5 p-4 space-y-3">
+            <div className="flex justify-between text-sm items-center">
+              <div className="flex items-center gap-2 text-zinc-400">
+                <div className="flex h-4 w-4 items-center justify-center rounded-full bg-white overflow-hidden p-0.5">
+                  <Image src={LOGOS.XAUt0} alt="XAUt0" width={12} height={12} />
+                </div>
+                <span className="text-xs">Collateral (XAUt0)</span>
+              </div>
+              <span className="text-white text-xs font-medium">
+                {projectedCollateral < 0.0001
+                  ? "< 0.0001"
+                  : projectedCollateral.toFixed(4)}{" "}
+                XAUt0
+              </span>
+            </div>
+            <div className="flex justify-between text-sm items-center">
+              <div className="flex items-center gap-2 text-zinc-400">
+                <div className="flex h-4 w-4 items-center justify-center rounded-full bg-white overflow-hidden p-0.5">
+                  <Image src={LOGOS.USDT0} alt="USDT" width={12} height={12} />
+                </div>
+                <span className="text-xs">Loan (USDT0)</span>
+              </div>
+              <span className="text-white text-xs font-medium">
+                {projectedBorrow.toFixed(2)} USDT0
+              </span>
+            </div>
+            <div className="h-px bg-white/5 my-1" />
+            <div className="flex justify-between text-xs">
+              <span className="text-zinc-500">LTV</span>
+              <span
+                className={cn(
+                  "font-medium",
+                  isDanger
+                    ? "text-red-400"
+                    : isAtRisk
+                      ? "text-amber-400"
+                      : "text-white",
+                )}
+              >
+                {currentLTV.toFixed(2)}%
+                {(supplyAmount ||
+                  borrowAmount ||
+                  repayAmount ||
+                  withdrawAmount) &&
+                Math.abs(projectedLTV - currentLTV) > 0.001 ? (
+                  <>
+                    <span className="mx-1.5 text-zinc-600">→</span>
+                    <span
+                      className={cn(
+                        projectedLTV >= lltv * 0.95
+                          ? "text-red-400"
+                          : projectedLTV >= lltv * 0.9
+                            ? "text-amber-400"
+                            : projectedLTV < currentLTV
+                              ? "text-emerald-400"
+                              : "text-white",
+                      )}
+                    >
+                      {projectedLTV > 100 ? ">100" : projectedLTV.toFixed(2)}%
+                    </span>
+                  </>
+                ) : null}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-zinc-500">Liquidation LTV</span>
+              <span className="text-white font-medium">{lltv.toFixed(0)}%</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-zinc-500">APR</span>
+              <span className="text-emerald-400 font-medium">
+                {borrowRate}%
+              </span>
             </div>
           </div>
 
           <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
             onClick={() => {
-              setActionType("borrow");
-              handleAction();
+              if (sidebarMode === "repay") {
+                handleAction({
+                  type: "repay",
+                  repay: repayAmount,
+                  withdraw: withdrawAmount,
+                  actionId: "main",
+                  repayMax: repayMax,
+                  withdrawMax: withdrawMax,
+                });
+              } else {
+                handleAction();
+              }
             }}
             disabled={
               isExecuting ||
-              (!supplyAmount && !borrowAmount) ||
+              (sidebarMode === "borrow" &&
+                Number(supplyAmount || 0) <= 0 &&
+                Number(borrowAmount || 0) <= 0) ||
+              (sidebarMode === "repay" &&
+                Number(repayAmount || 0) <= 0 &&
+                Number(withdrawAmount || 0) <= 0) ||
               Number(supplyAmount) > Number(balances.collateral) ||
               Number(borrowAmount) > totalLiquidity ||
-              (projectedLTV >= lltv && projectedBorrow > userBorrow) // Only block if LTV increases or stays high while borrowing
+              Number(repayAmount) > Number(balances.loan) ||
+              Number(repayAmount) > userBorrow + 0.0001 ||
+              Number(withdrawAmount) > userCollateral ||
+              (projectedLTV > lltv + 0.01 && projectedBorrow > userBorrow) ||
+              (projectedBorrow > userBorrow && projectedCollateral <= 0)
             }
             className={cn(
-              "w-full rounded-xl py-3 text-medium font-bold transition-all flex items-center justify-center gap-2",
+              "w-full rounded-2xl py-4 text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-2xl shadow-emerald-500/10",
               isExecuting ||
-                (!supplyAmount && !borrowAmount) ||
+                (sidebarMode === "borrow" &&
+                  Number(supplyAmount || 0) <= 0 &&
+                  Number(borrowAmount || 0) <= 0) ||
+                (sidebarMode === "repay" &&
+                  Number(repayAmount || 0) <= 0 &&
+                  Number(withdrawAmount || 0) <= 0) ||
                 Number(supplyAmount) > Number(balances.collateral) ||
                 Number(borrowAmount) > totalLiquidity ||
-                (projectedLTV > lltv + 0.01 && projectedBorrow > userBorrow)
+                Number(repayAmount) > Number(balances.loan) ||
+                Number(repayAmount) > userBorrow + 0.0001 ||
+                Number(withdrawAmount) > userCollateral ||
+                (projectedLTV > lltv + 0.01 && projectedBorrow > userBorrow) ||
+                (projectedBorrow > userBorrow && projectedCollateral <= 0)
                 ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                : "bg-emerald-500 text-black hover:bg-emerald-400",
+                : "bg-white text-black hover:bg-zinc-100",
             )}
           >
             {executingAction === "main" ? (
@@ -1160,16 +1224,44 @@ export function BorrowDashboard() {
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Executing...
               </>
-            ) : Number(supplyAmount) > Number(balances.collateral) ? (
-              "Insufficient Balance"
-            ) : Number(borrowAmount) > totalLiquidity ? (
-              "Insufficient Liquidity"
-            ) : projectedLTV >= lltv && projectedBorrow > userBorrow ? (
-              "Loan Too High (LTV Limit)"
-            ) : !supplyAmount && !borrowAmount ? (
-              "Enter Amount"
+            ) : sidebarMode === "borrow" ? (
+              Number(supplyAmount) > Number(balances.collateral) ? (
+                "Insufficient Balance"
+              ) : Number(borrowAmount) > totalLiquidity ? (
+                "Insufficient Liquidity"
+              ) : (Number(borrowAmount) > userBorrow &&
+                  projectedCollateral <= 0) ||
+                (projectedLTV >= lltv && projectedBorrow > userBorrow) ? (
+                "Insufficient Collateral"
+              ) : Number(supplyAmount || 0) <= 0 &&
+                Number(borrowAmount || 0) <= 0 ? (
+                "Enter an amount"
+              ) : Number(supplyAmount || 0) > 0 &&
+                Number(borrowAmount || 0) > 0 ? (
+                "Supply & Borrow"
+              ) : Number(supplyAmount || 0) > 0 ? (
+                "Supply Collateral"
+              ) : (
+                "Borrow USDT0"
+              )
+            ) : Number(repayAmount) > Number(balances.loan) ? (
+              "Insufficient USDT0"
+            ) : Number(repayAmount) > userBorrow + 0.0001 ? (
+              "Inconsistent Amount"
+            ) : Number(withdrawAmount) > userCollateral ? (
+              "Insufficient Collateral"
+            ) : projectedLTV >= lltv && userBorrow > 0 ? (
+              "LTV Limit (Repay or Add more)"
+            ) : Number(repayAmount || 0) <= 0 &&
+              Number(withdrawAmount || 0) <= 0 ? (
+              "Enter an amount"
+            ) : Number(repayAmount || 0) > 0 &&
+              Number(withdrawAmount || 0) > 0 ? (
+              "Repay & Withdraw"
+            ) : Number(repayAmount || 0) > 0 ? (
+              "Repay Loan"
             ) : (
-              "Confirm Transaction"
+              "Withdraw Collateral"
             )}
           </motion.button>
         </div>
@@ -1236,14 +1328,39 @@ function MarketAttribute({
   logo,
   simpleValue,
   hasInfo,
+  infoText,
   href,
   onCopy,
 }: any) {
+  const [showInfo, setShowInfo] = useState(false);
+
   return (
     <div className="flex justify-between items-center border-b border-zinc-800/50 pb-4">
-      <span className="text-zinc-400 text-sm flex items-center gap-1">
-        {label} {hasInfo && <Info className="h-3 w-3" />}
-      </span>
+      <div className="text-zinc-400 text-sm flex items-center gap-1">
+        <span>{label}</span>
+        {hasInfo && (
+          <div
+            className="relative"
+            onMouseEnter={() => setShowInfo(true)}
+            onMouseLeave={() => setShowInfo(false)}
+          >
+            <Info className="h-3 w-3 cursor-help hover:text-white transition-colors" />
+            <AnimatePresence>
+              {showInfo && (
+                <motion.div
+                  initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                  className="absolute left-0 bottom-full mb-2 w-48 z-50 p-3 rounded-xl bg-[#0A0A0A] border border-white/10 shadow-2xl text-[11px] font-normal leading-relaxed text-zinc-400 pointer-events-none"
+                >
+                  {infoText || "More information about this attribute."}
+                  <div className="absolute left-2 top-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white/5" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
       {simpleValue ? (
         <div className="flex items-center gap-2">
           <span className="text-white text-sm font-medium">{value}</span>
@@ -1265,6 +1382,46 @@ function MarketAttribute({
               <ExternalLink className="h-3 w-3 text-zinc-500 hover:text-white transition-colors" />
             </a>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetricStat({ label, value, subValue, info, isLoading }: any) {
+  const [showInfo, setShowInfo] = useState(false);
+
+  return (
+    <div className="relative group/metric">
+      <div className="flex items-center gap-1 text-zinc-500 text-sm mb-1">
+        <span>{label}</span>
+        <div
+          className="relative"
+          onMouseEnter={() => setShowInfo(true)}
+          onMouseLeave={() => setShowInfo(false)}
+        >
+          <Info className="h-3 w-3 cursor-help hover:text-white transition-colors" />
+          <AnimatePresence>
+            {showInfo && (
+              <motion.div
+                initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                className="absolute left-0 bottom-full mb-2 w-48 z-50 p-3 rounded-xl bg-zinc-950 border border-white/10 shadow-2xl text-[11px] font-normal leading-relaxed text-zinc-400 pointer-events-none"
+              >
+                {info}
+                <div className="absolute left-2 top-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white/5" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+      <div className="text-3xl font-medium text-white">
+        {isLoading ? "..." : value}
+      </div>
+      {subValue && (
+        <div className="text-sm text-zinc-500">
+          {isLoading ? "..." : subValue}
         </div>
       )}
     </div>
