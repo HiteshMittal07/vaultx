@@ -68,7 +68,7 @@ export function LandingPage() {
           transition={{ duration: 0.8 }}
           className="relative z-10 max-w-5xl w-full"
         >
-          <h1 className="text-6xl font-extrabold tracking-tight md:text-8xl lg:text-9xl">
+          <h1 className="text-5xl font-extrabold tracking-tight md:text-8xl lg:text-9xl">
             <span className="block text-emerald-400 drop-shadow-[0_0_30px_rgba(52,211,153,0.3)]">
               Borrow Smart,
             </span>
