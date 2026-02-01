@@ -180,8 +180,25 @@ export async function getBorrowRate(
 }
 
 /**
- * Calculates borrow assets from borrow shares.
+ * Fetches latest price from Pyth Hermes API.
  */
+export async function getLatestPythPrice(priceId: string): Promise<number> {
+  try {
+    const response = await fetch(
+      `https://hermes.pyth.network/v2/updates/price/latest?ids[]=${priceId}`,
+    );
+    if (!response.ok) {
+      throw new Error("Failed to fetch price data");
+    }
+    const data = await response.json();
+    const priceData = data.parsed[0].price;
+    return Number(priceData.price) * Math.pow(10, priceData.expo);
+  } catch (error) {
+    console.error("Error fetching Pyth price:", error);
+    return 0;
+  }
+}
+
 export function calculateBorrowAssets(
   borrowShares: bigint | number,
   totalBorrowAssets: bigint | number,
