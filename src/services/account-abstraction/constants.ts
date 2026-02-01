@@ -1,4 +1,4 @@
-import { Hex, Address, parseAbi, toFunctionSelector, getAbiItem } from "viem";
+import { parseAbi, toFunctionSelector, getAbiItem } from "viem";
 import { entryPoint07Address } from "viem/account-abstraction";
 
 export const ENTRYPOINT_ADDRESS = entryPoint07Address;
@@ -23,7 +23,7 @@ export const ACCOUNT_EXECUTE_ABI = parseAbi([
 ]);
 
 export const EXECUTE_USER_OP_SELECTOR = toFunctionSelector(
-  getAbiItem({ abi: ACCOUNT_EXECUTE_ABI, name: "executeUserOp" })
+  getAbiItem({ abi: ACCOUNT_EXECUTE_ABI, name: "executeUserOp" }),
 );
 
 export const MOCK_SIGNATURE =

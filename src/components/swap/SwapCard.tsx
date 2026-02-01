@@ -17,17 +17,12 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import {
-  createPublicClient,
-  http,
   parseUnits,
   formatUnits,
   Address,
   Hex,
   encodeFunctionData,
-  encodePacked,
-  encodeAbiParameters,
 } from "viem";
-import { arbitrum } from "viem/chains";
 import {
   useSign7702Authorization,
   useSignMessage,
@@ -38,84 +33,17 @@ import {
   entryPoint07Address,
   getUserOperationHash,
 } from "viem/account-abstraction";
-
-/**
- * CONTRACT ADDRESSES & CONFIG
- */
-const V3_QUOTER = "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6";
-const SWAP_ROUTER_02 = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
-const USDT0 = "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9";
-const XAUT0 = "0x40461291347e1eCbb09499F3371D3f17f10d7159";
-const DEFAULT_FEE = 500;
-
-const ROUTER_ABI = [
-  {
-    inputs: [
-      {
-        components: [
-          { internalType: "address", name: "tokenIn", type: "address" },
-          { internalType: "address", name: "tokenOut", type: "address" },
-          { internalType: "uint24", name: "fee", type: "uint24" },
-          { internalType: "address", name: "recipient", type: "address" },
-          { internalType: "uint256", name: "deadline", type: "uint256" },
-          { internalType: "uint256", name: "amountIn", type: "uint256" },
-          {
-            internalType: "uint256",
-            name: "amountOutMinimum",
-            type: "uint256",
-          },
-          {
-            internalType: "uint160",
-            name: "sqrtPriceLimitX96",
-            type: "uint160",
-          },
-        ],
-        internalType: "struct ISwapRouter.ExactInputSingleParams",
-        name: "params",
-        type: "tuple",
-      },
-    ],
-    name: "exactInputSingle",
-    outputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }],
-    stateMutability: "payable",
-    type: "function",
-  },
-] as const;
-const LOGOS = {
-  USDT0: "https://cdn.morpho.org/assets/logos/usdt0.svg",
-  XAUT0: "https://cdn.morpho.org/assets/logos/xaut0.svg",
-} as const;
-
-const ERC20_ABI = [
-  {
-    constant: true,
-    inputs: [{ name: "_owner", type: "address" }],
-    name: "balanceOf",
-    outputs: [{ name: "balance", type: "uint256" }],
-    type: "function",
-  },
-] as const;
-
-const QUOTER_ABI = [
-  {
-    inputs: [
-      { internalType: "address", name: "tokenIn", type: "address" },
-      { internalType: "address", name: "tokenOut", type: "address" },
-      { internalType: "uint24", name: "fee", type: "uint24" },
-      { internalType: "uint256", name: "amountIn", type: "uint256" },
-      { internalType: "uint160", name: "sqrtPriceLimitX96", type: "uint160" },
-    ],
-    name: "quoteExactInputSingle",
-    outputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-] as const;
-
-const publicClient = createPublicClient({
-  chain: arbitrum,
-  transport: http(),
-});
+import { publicClient } from "@/lib/blockchain/client";
+import { ROUTER_ABI, QUOTER_ABI } from "@/constants/abis";
+import {
+  USDT0,
+  XAUT0,
+  V3_QUOTER,
+  SWAP_ROUTER_02,
+  BICONOMY_NEXUS_V1_2_0,
+} from "@/constants/addresses";
+import { LOGOS, DEFAULT_FEE, arbitrum } from "@/constants/config";
+import { getTokenBalances } from "@/lib/blockchain/utils";
 
 type TokenInfo = {
   symbol: "USDT0" | "XAUT0";
@@ -169,6 +97,26 @@ export function SwapCard() {
   const [showDetails, setShowDetails] = useState(false);
   const [slippage, setSlippage] = useState("5.0"); // 5% default
   const [deadlineMinutes, setDeadlineMinutes] = useState("30"); // 30 min default
+  const [history, setHistory] = useState<any[]>([]);
+
+  // Load history from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("vaultx_history");
+    if (saved) {
+      try {
+        setHistory(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to load history:", e);
+      }
+    }
+  }, []);
+
+  // Save history to localStorage
+  useEffect(() => {
+    if (history.length > 0) {
+      localStorage.setItem("vaultx_history", JSON.stringify(history));
+    }
+  }, [history]);
 
   /**
    * Fetches user balances for both tokens
@@ -176,35 +124,25 @@ export function SwapCard() {
   const fetchBalances = useCallback(async () => {
     if (!address) return;
     try {
-      const [bIn, bOut] = await Promise.all([
-        publicClient.readContract({
-          address: tokenIn.address,
-          abi: ERC20_ABI,
-          functionName: "balanceOf",
-          args: [address as `0x${string}`],
-        }),
-        publicClient.readContract({
-          address: tokenOut.address,
-          abi: ERC20_ABI,
-          functionName: "balanceOf",
-          args: [address as `0x${string}`],
-        }),
+      const [bIn, bOut] = await getTokenBalances(address as Address, [
+        tokenIn.address as Address,
+        tokenOut.address as Address,
       ]);
 
-      setRawBalanceIn(bIn as bigint);
-      setRawBalanceOut(bOut as bigint);
+      setRawBalanceIn(bIn);
+      setRawBalanceOut(bOut);
 
       setBalanceIn(
-        Number(formatUnits(bIn as bigint, tokenIn.decimals)).toLocaleString(
-          undefined,
-          { minimumFractionDigits: 3, maximumFractionDigits: 5 },
-        ),
+        Number(formatUnits(bIn, tokenIn.decimals)).toLocaleString(undefined, {
+          minimumFractionDigits: 3,
+          maximumFractionDigits: 5,
+        }),
       );
       setBalanceOut(
-        Number(formatUnits(bOut as bigint, tokenOut.decimals)).toLocaleString(
-          undefined,
-          { minimumFractionDigits: 3, maximumFractionDigits: 5 },
-        ),
+        Number(formatUnits(bOut, tokenOut.decimals)).toLocaleString(undefined, {
+          minimumFractionDigits: 3,
+          maximumFractionDigits: 5,
+        }),
       );
     } catch (err) {
       console.error("Balance fetch error:", err);
@@ -294,7 +232,7 @@ export function SwapCard() {
         // Sign 7702 authorization only if the wallet has no code
         authorization = await signAuthorization(
           {
-            contractAddress: "0x00000000383e8cBe298514674Ea60Ee1d1de50ac",
+            contractAddress: BICONOMY_NEXUS_V1_2_0,
             chainId: arbitrum.id,
             nonce: 1,
           },
@@ -419,6 +357,21 @@ export function SwapCard() {
         txHash: txHash,
       });
 
+      // Add to history
+      setHistory((prev) => [
+        {
+          id: txHash,
+          type: "swap",
+          tokenIn: tokenIn.symbol,
+          tokenOut: tokenOut.symbol,
+          amountIn: sellAmount,
+          amountOut: buyAmount,
+          timestamp: new Date().toLocaleTimeString(),
+          status: "success",
+        },
+        ...prev,
+      ]);
+
       fetchBalances();
       setSellAmount("");
       setBuyAmount("");
@@ -445,9 +398,6 @@ export function SwapCard() {
     setBuyAmount("");
   };
 
-  /**
-   * Refresh effects
-   */
   useEffect(() => {
     fetchBalances();
   }, [fetchBalances]);
@@ -498,10 +448,10 @@ export function SwapCard() {
                       </span>
                       <div className="relative flex items-center">
                         <input
-                          type="text"
+                          type="number"
                           value={slippage}
                           onChange={(e) => setSlippage(e.target.value)}
-                          className="w-16 bg-white/5 rounded-lg px-2 py-1 text-right text-xs font-mono text-emerald-400 outline-none border border-white/5 focus:border-emerald-500/50"
+                          className="w-16 bg-white/5 rounded-lg px-2 py-1 text-right text-xs font-mono text-emerald-400 outline-none border border-white/5 focus:border-emerald-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                         <span className="ml-1 text-[10px] text-zinc-500">
                           %
@@ -515,10 +465,10 @@ export function SwapCard() {
                       </span>
                       <div className="relative flex items-center">
                         <input
-                          type="text"
+                          type="number"
                           value={deadlineMinutes}
                           onChange={(e) => setDeadlineMinutes(e.target.value)}
-                          className="w-16 bg-white/5 rounded-lg px-2 py-1 text-right text-xs font-mono text-emerald-400 outline-none border border-white/5 focus:border-emerald-500/50"
+                          className="w-16 bg-white/5 rounded-lg px-2 py-1 text-right text-xs font-mono text-emerald-400 outline-none border border-white/5 focus:border-emerald-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                         <span className="ml-1 text-[10px] text-zinc-500">
                           m
@@ -570,11 +520,11 @@ export function SwapCard() {
 
             <div className="flex items-center justify-between gap-4">
               <input
-                type="text"
+                type="number"
                 placeholder="0"
                 value={sellAmount}
                 onChange={(e) => setSellAmount(e.target.value)}
-                className={`w-full bg-transparent text-4xl font-semibold placeholder-zinc-800 outline-none transition-colors ${isInsufficientBalance ? "text-red-400" : "text-white"}`}
+                className={`w-full bg-transparent text-4xl font-semibold placeholder-zinc-800 outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isInsufficientBalance ? "text-red-400" : "text-white"}`}
               />
               <div className="flex shrink-0 items-center gap-2 rounded-2xl bg-white/5 px-4 py-2 hover:bg-white/10 transition-all border border-white/5 group/asset cursor-pointer">
                 <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white p-0.5 shadow-xl">

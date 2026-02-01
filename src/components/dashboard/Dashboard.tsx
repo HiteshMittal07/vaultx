@@ -7,49 +7,22 @@ import {
   TrendingUp,
   HandCoins,
   RefreshCw,
-  CheckCircle2,
-  Copy,
-  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
-import {
-  usePrivy,
-  useSign7702Authorization,
-  useSignMessage,
-  useWallets,
-} from "@privy-io/react-auth";
+import { useWallets } from "@privy-io/react-auth";
 import { DepositSection } from "./DepositSection";
+import { formatUnits, Address } from "viem";
+import { publicClient } from "@/lib/blockchain/client";
+import { USDT0 } from "@/constants/addresses";
 import {
-  createPublicClient,
-  http,
-  formatUnits,
-  encodeFunctionData,
-  Address,
-  Hex,
-} from "viem";
-import { arbitrum } from "viem/chains";
-import { AAService, bigIntReplacer } from "@/services/account-abstraction";
-import {
-  entryPoint07Address,
-  getUserOperationHash,
-} from "viem/account-abstraction";
-
-const USDT_ADDRESS = "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9";
-const ERC20_ABI = [
-  {
-    inputs: [{ name: "account", type: "address" }],
-    name: "balanceOf",
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-] as const;
-
-const publicClient = createPublicClient({
-  chain: arbitrum,
-  transport: http(),
-});
+  getTokenBalance,
+  getMorphoMarketData,
+  getOraclePrice,
+  calculateBorrowAssets,
+} from "@/lib/blockchain/utils";
+import Image from "next/image";
+import { LOGOS } from "@/constants/config";
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState<"positions" | "history">(
@@ -59,35 +32,76 @@ export function Dashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSmartAccount, setIsSmartAccount] = useState(false);
   const { wallets } = useWallets();
-  const { signAuthorization } = useSign7702Authorization();
-  const { signMessage } = useSignMessage();
-  // Get primary wallet (Privy embedded or connected)
   const wallet =
     wallets.find((w) => w.walletClientType === "privy") || wallets[0];
   const address = wallet?.address;
 
-  const fetchBalance = useCallback(async () => {
+  const [history, setHistory] = useState<any[]>([]);
+  const [positionData, setPositionData] = useState<{
+    collateral: number;
+    borrow: number;
+    oraclePrice: number;
+  } | null>(null);
+
+  // Load history
+  useEffect(() => {
+    const saved = localStorage.getItem("vaultx_history");
+    if (saved) {
+      try {
+        setHistory(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to load history:", e);
+      }
+    }
+  }, []);
+
+  const fetchData = useCallback(async () => {
     if (!address) return;
 
     setIsRefreshing(true);
     try {
-      const data = await publicClient.readContract({
-        address: USDT_ADDRESS,
-        abi: ERC20_ABI,
-        functionName: "balanceOf",
-        args: [address as `0x${string}`],
-      });
-
-      // USDT has 6 decimals
-      const formatted = formatUnits(data, 6);
+      // 1. Fetch USDT Balance
+      const data = await getTokenBalance(USDT0, address as Address);
       setBalance(
-        Number(formatted).toLocaleString(undefined, {
+        Number(formatUnits(data, 6)).toLocaleString(undefined, {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         }),
       );
+
+      // 2. Fetch Morpho Position
+      const { params, state, position } = await getMorphoMarketData(
+        address as Address,
+      );
+
+      // 3. Fetch Oracle Price
+      const oPrice = params ? await getOraclePrice(params) : 0;
+
+      const collateral = position
+        ? Number(formatUnits((position as any)[2], 6))
+        : 0;
+
+      // Calculate borrow assets from shares
+      const borrowAssets =
+        position && state && (state as any)[3] > 0
+          ? calculateBorrowAssets(
+              (position as any)[1],
+              (state as any)[2],
+              (state as any)[3],
+            )
+          : 0;
+
+      if (collateral > 0 || borrowAssets > 0) {
+        setPositionData({
+          collateral,
+          borrow: borrowAssets,
+          oraclePrice: oPrice,
+        });
+      } else {
+        setPositionData(null);
+      }
     } catch (error) {
-      console.error("Error fetching balance:", error);
+      console.error("Error fetching dashboard data:", error);
     } finally {
       setIsRefreshing(false);
     }
@@ -106,9 +120,9 @@ export function Dashboard() {
   }, [address]);
 
   useEffect(() => {
-    fetchBalance();
+    fetchData();
     checkSmartAccount();
-  }, [fetchBalance, checkSmartAccount]);
+  }, [fetchData, checkSmartAccount]);
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-8">
@@ -142,7 +156,7 @@ export function Dashboard() {
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-medium text-zinc-400">Net Worth</p>
                 <button
-                  onClick={fetchBalance}
+                  onClick={fetchData}
                   disabled={isRefreshing}
                   className="p-2 rounded-full h-8 w-8 hover:bg-white/5 flex items-center justify-center transition-colors disabled:opacity-50"
                 >
@@ -263,23 +277,137 @@ export function Dashboard() {
         </div>
 
         {/* Content */}
-        <div className="p-12 flex flex-col items-center justify-center text-center">
-          <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
-            <Wallet className="h-8 w-8 text-zinc-600" />
+        {activeTab === "positions" ? (
+          positionData ? (
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="rounded-xl border border-white/5 bg-white/5 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-full overflow-hidden bg-white">
+                      <Image
+                        src={LOGOS.USDT0}
+                        alt="USDT"
+                        width={32}
+                        height={32}
+                      />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-medium text-white">
+                        XAUT / USDT Market
+                      </h4>
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-widest">
+                        Morpho Blue Position
+                      </p>
+                    </div>
+                  </div>
+                  <Link href="/borrow">
+                    <button className="text-xs text-emerald-500 font-bold hover:underline">
+                      Manage
+                    </button>
+                  </Link>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase font-black tracking-tighter">
+                      Collateral
+                    </p>
+                    <p className="text-xl font-bold text-white">
+                      {positionData.collateral.toFixed(6)} XAUT
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      $
+                      {(
+                        positionData.collateral * positionData.oraclePrice
+                      ).toFixed(2)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase font-black tracking-tighter">
+                      Borrowed
+                    </p>
+                    <p className="text-xl font-bold text-white">
+                      {positionData.borrow.toFixed(2)} USDT
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      LTV:{" "}
+                      {(
+                        (positionData.borrow /
+                          (positionData.collateral *
+                            positionData.oraclePrice)) *
+                        100
+                      ).toFixed(2)}
+                      %
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-12 flex flex-col items-center justify-center text-center">
+              <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
+                <Wallet className="h-8 w-8 text-zinc-600" />
+              </div>
+              <h3 className="text-lg font-medium text-white mb-2">
+                No active positions
+              </h3>
+              <p className="text-zinc-400 max-w-sm mb-6">
+                You don't have any active positions yet. Start by depositing
+                funds or taking a loan.
+              </p>
+              <Link
+                href="/borrow"
+                className="rounded-full bg-emerald-500 px-6 py-2 text-sm font-medium text-black transition-transform hover:scale-105 hover:bg-emerald-400"
+              >
+                Start Borrowing
+              </Link>
+            </div>
+          )
+        ) : (
+          <div className="w-full">
+            {history.length > 0 ? (
+              <div className="divide-y divide-white/5">
+                {history.map((tx, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between px-6 py-4 hover:bg-white/[0.02] transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                        <RefreshCw className="h-4 w-4 text-emerald-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-white capitalize">
+                          {tx.type} Successful
+                        </p>
+                        <p className="text-[10px] text-zinc-500 font-mono">
+                          {tx.timestamp}
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={`https://arbiscan.io/tx/${tx.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-bold text-zinc-500 hover:text-emerald-400 uppercase tracking-widest flex items-center gap-1"
+                    >
+                      Arbiscan
+                      <ArrowRight className="h-3 w-3 -rotate-45" />
+                    </a>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-12 flex flex-col items-center justify-center text-center">
+                <h3 className="text-lg font-medium text-white mb-2">
+                  No history
+                </h3>
+                <p className="text-zinc-400">
+                  Your recent transactions will appear here.
+                </p>
+              </div>
+            )}
           </div>
-          <h3 className="text-lg font-medium text-white mb-2">
-            No active positions
-          </h3>
-          <p className="text-zinc-400 max-w-sm mb-6">
-            You don't have any active positions yet. Start by depositing funds.
-          </p>
-          <Link
-            href="/swap"
-            className="rounded-full bg-emerald-500 px-6 py-2 text-sm font-medium text-black transition-transform hover:scale-105 hover:bg-emerald-400"
-          >
-            Explore Markets
-          </Link>
-        </div>
+        )}
       </motion.div>
     </div>
   );

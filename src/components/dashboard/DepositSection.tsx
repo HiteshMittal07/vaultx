@@ -6,22 +6,13 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import QRCode from "react-qr-code";
 import Image from "next/image";
-import { createPublicClient, http, Address } from "viem";
-import { arbitrum } from "viem/chains";
-
-const publicClient = createPublicClient({
-  chain: arbitrum,
-  transport: http(),
-});
+import { Address } from "viem";
+import { publicClient } from "@/lib/blockchain/client";
+import { LOGOS } from "@/constants/config";
 
 interface DepositSectionProps {
   address?: string;
 }
-
-const LOGOS = {
-  USDT0: "https://cdn.morpho.org/assets/logos/usdt0.svg",
-  XAUT0: "https://cdn.morpho.org/assets/logos/xaut0.svg",
-};
 
 export function DepositSection({ address }: DepositSectionProps) {
   const [copied, setCopied] = useState(false);
@@ -43,9 +34,7 @@ export function DepositSection({ address }: DepositSectionProps) {
     checkSmartAccount();
   }, [address]);
 
-  // Mock data for UI
   const network = { name: "Arbitrum One", color: "bg-blue-500" };
-  const token = { name: "USDT", symbol: "USDT" };
 
   const handleCopy = () => {
     if (address) {

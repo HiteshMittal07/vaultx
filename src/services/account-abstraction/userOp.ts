@@ -6,7 +6,6 @@ import {
   Authorization,
   StateOverride,
   encodeFunctionData,
-  PrivateKeyAccount,
 } from "viem";
 import {
   UserOperation,

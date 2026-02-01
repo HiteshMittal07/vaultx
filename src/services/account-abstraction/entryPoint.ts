@@ -21,7 +21,6 @@ import { privateKeyToAccount } from "viem/accounts";
 export async function sendUserOperation(
   signedUserOp: UserOperation,
   authorization?: Authorization,
-  beneficiary: Address = "0x3AC05161b76a35c1c28dC99Aa01BEd7B24cEA3bf",
 ): Promise<Hex> {
   const relayer = privateKeyToAccount(process.env.PRIVATE_KEY as Hex);
 
@@ -36,7 +35,7 @@ export async function sendUserOperation(
   const handleOpsData = encodeFunctionData({
     abi: entryPoint07Abi,
     functionName: "handleOps",
-    args: [[packedUserOp], getAddress(beneficiary)],
+    args: [[packedUserOp], getAddress(relayer.address)],
   });
 
   console.log("[AccountAbstraction] Sending handleOps transaction...");
