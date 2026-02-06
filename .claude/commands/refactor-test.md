@@ -1,19 +1,41 @@
 ---
-description: Code refactorization and testing to make sure everything works.
-arguement-hint: [file-path]
+description: Scoped code refactor with quality & test guarantees
+arguement-hint: [file-path | directory]
 ---
 
-# Refactor Python Code: $ARGUMENTS
-Refactor the files to improve code quality and readability.
+# Refactor Project Code: $ARGUMENTS
 
-If $ARGUMENTS is empty:
-Refactor the entire codebase
+## IMPORTANT:
+- This command NEVER scans the entire repository automatically.
+- If no argument is provided, refactor within refactor boundary.
+
+## Rules
+- Operate ONLY on explicitly provided files/directories or within refactor boundary
+- No repo-wide inference
+- One refactor phase per execution
+- Minimal explanations
+
+## If $ARGUMENTS is empty:
+Refactor within refactor boundary.
+
+## Refactor Boundary:
+The following paths are tightly coupled and must be reasoned about together:
+- src/components
+- src/app
+- src/hooks
+- src/services
+- src/types
+- src/contexts
+
+Everything else in the repo is out of scope and must be treated as stable.
+Do NOT scan or modify files outside this boundary.
 
 ## Steps
 
 1. **Read the file:** `cat $ARGUMENTS`
 2. **Analyze the code** and identify issues:
    - Long components
+   - Non-Relevant and Unneccassary Comments
    - Lint Errors
    - Duplicate code
    - Complex prop drilling
@@ -26,11 +48,9 @@ Refactor the entire codebase
    - Proper Typescript types
    - Clear File and function names
    - Extracted repeated code
-   - Removed unused files, functions, imports.
+   - Removed unused files, functions, imports and unneccassary comments.
 
 4. **Create tests And Run Tests** Write meaningful test cases (preferably TDD-style) to make sure everything works.   
-
-5. **Show before/after comparison**
 
 ## Refactoring Checklist
 
