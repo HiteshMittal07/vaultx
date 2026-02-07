@@ -8,16 +8,18 @@ import { GlassSphere, BackgroundGradients } from "./ui/GlassEffects";
 import { usePrivy } from "@privy-io/react-auth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { useDelegationStatus } from "@/hooks/useDelegationStatus";
 
 export function LandingPage() {
   const { authenticated, ready } = usePrivy();
+  const { isDelegated, isLoading } = useDelegationStatus();
   const router = useRouter();
 
   useEffect(() => {
-    if (ready && authenticated) {
-      router.push("/dashboard");
+    if (ready && authenticated && !isLoading) {
+      router.push(isDelegated ? "/dashboard" : "/policy");
     }
-  }, [ready, authenticated, router]);
+  }, [ready, authenticated, isLoading, isDelegated, router]);
 
   if (authenticated) return null;
 

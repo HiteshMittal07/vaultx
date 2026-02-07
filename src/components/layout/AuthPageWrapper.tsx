@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import { Navbar } from "@/components/ui/Navbar";
 import { GlassSphere, BackgroundGradients } from "@/components/ui/GlassEffects";
 import { cn } from "@/lib/utils";
-import { useServerSigner } from "@/hooks/useServerSigner";
+import { useDelegationStatus } from "@/hooks/useDelegationStatus";
 
 interface AuthPageWrapperProps {
   children: ReactNode;
@@ -21,8 +21,8 @@ export function AuthPageWrapper({
   horizontalCenter = false,
 }: AuthPageWrapperProps) {
   const { ready, authenticated } = usePrivy();
+  const { isDelegated, isLoading } = useDelegationStatus();
   const router = useRouter();
-  useServerSigner();
 
   useEffect(() => {
     if (ready && !authenticated) {
@@ -30,7 +30,14 @@ export function AuthPageWrapper({
     }
   }, [ready, authenticated, router]);
 
-  if (!ready || !authenticated) {
+  // Redirect to policy page if wallet is not delegated yet
+  useEffect(() => {
+    if (ready && authenticated && !isLoading && !isDelegated) {
+      router.push("/policy");
+    }
+  }, [ready, authenticated, isLoading, isDelegated, router]);
+
+  if (!ready || !authenticated || isLoading || !isDelegated) {
     return null;
   }
 
