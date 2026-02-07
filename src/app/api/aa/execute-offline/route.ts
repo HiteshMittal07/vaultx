@@ -20,6 +20,7 @@ import {
 import { MorphoMarketParamsRaw } from "@/types";
 import { MARKET_ID } from "@/constants/addresses";
 import { getDb } from "@/lib/mongodb";
+import { validateCallsAgainstPolicy } from "@/services/api/policy.service";
 
 /** Maximum allowed amount per offline transaction (application-level limit). */
 const MAX_AMOUNT_PER_TX = 1000;
@@ -66,6 +67,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "No actions to execute" },
         { status: 400 }
+      );
+    }
+
+    // Validate calls against backend policy (contract allowlist, selectors, values)
+    const policyCheck = validateCallsAgainstPolicy(calls);
+    if (!policyCheck.valid) {
+      console.error("[API] Policy violation:", policyCheck.error);
+      return NextResponse.json(
+        { error: `Policy violation: ${policyCheck.error}` },
+        { status: 403 }
       );
     }
 
