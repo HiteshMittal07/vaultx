@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { MetricStatProps } from "@/types";
 
-export function MetricStat({ label, value, subValue, info, isLoading }: any) {
+export function MetricStat({ label, value, subValue, info, isLoading }: MetricStatProps) {
   const [showInfo, setShowInfo] = useState(false);
 
   return (

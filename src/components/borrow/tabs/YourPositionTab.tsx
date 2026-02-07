@@ -1,6 +1,18 @@
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { LOGOS } from "@/constants/config";
+import { PythPrices } from "@/types";
+
+interface YourPositionTabProps {
+  userCollateral: number;
+  userBorrow: number;
+  currentLTV: number;
+  lltv: number;
+  pythPrices: PythPrices;
+  liquidationPrice: number;
+  percentDropToLiquidation: number;
+  utilization: string;
+}
 
 export function YourPositionTab({
   userCollateral,
@@ -11,7 +23,7 @@ export function YourPositionTab({
   liquidationPrice,
   percentDropToLiquidation,
   utilization,
-}: any) {
+}: YourPositionTabProps) {
   return (
     <div className="space-y-8 sm:space-y-12">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-20 gap-y-10 pt-4">

@@ -4,143 +4,77 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 import { ArrowRight, Wallet, HandCoins, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useWallets } from "@privy-io/react-auth";
 import { DepositSection } from "./DepositSection";
 import { cn } from "@/lib/utils";
-import { formatUnits, Address } from "viem";
-import { publicClient } from "@/lib/blockchain/client";
-import { USDT0 } from "@/constants/addresses";
-import { LOGOS, APP_CONFIG } from "@/constants/config";
+import { Address } from "viem";
+import { LOGOS } from "@/constants/config";
 import {
-  getTokenBalance,
-  getMorphoMarketData,
-  getOraclePrice,
-  calculateBorrowAssets,
-  getLatestPythPrice,
-} from "@/lib/blockchain/utils";
+  usePosition,
+  usePrices,
+  useTokenBalances,
+} from "@/hooks";
+import { TransactionHistoryItem } from "@/types";
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState<"positions" | "history">(
     "positions",
   );
-  const [balance, setBalance] = useState<string>("0.00");
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isSmartAccount, setIsSmartAccount] = useState(false);
   const { wallets } = useWallets();
   const wallet =
     wallets.find((w) => w.walletClientType === "privy") || wallets[0];
   const address = wallet?.address;
 
-  const [history, setHistory] = useState<any[]>([]);
-  const [positionData, setPositionData] = useState<{
-    collateral: number;
-    borrow: number;
-    oraclePrice: number;
-    lltv: number;
-  } | null>(null);
-  const [pythPrices, setPythPrices] = useState<{
-    XAUt0: number;
-    USDT0: number;
-  }>({ XAUt0: 0, USDT0: 1 });
+  const [history, setHistory] = useState<TransactionHistoryItem[]>([]);
 
-  useEffect(() => {
-    if (!address) return;
-    const saved = localStorage.getItem(`vaultx_history_${address}`);
-    if (saved) {
-      try {
-        setHistory(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to load history:", e);
-      }
-    } else {
-      setHistory([]);
-    }
-  }, [address]);
-
-  const fetchData = useCallback(async () => {
-    if (!address) return;
-
-    setIsRefreshing(true);
-    try {
-      // 1. Fetch USDT Balance
-      const data = await getTokenBalance(USDT0, address as Address);
-      setBalance(
-        Number(formatUnits(data, 6)).toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        }),
-      );
-
-      // 2. Fetch Morpho Position
-      const { params, state, position } = await getMorphoMarketData(
-        address as Address,
-      );
-
-      // 3. Fetch Oracle Price
-      const oPrice = params ? await getOraclePrice(params) : 0;
-
-      const collateral = position
-        ? Number(formatUnits((position as any)[2], 6))
-        : 0;
-
-      // Calculate borrow assets from shares
-      const borrowAssets =
-        position && state && (state as any)[3] > 0
-          ? calculateBorrowAssets(
-              (position as any)[1],
-              (state as any)[2],
-              (state as any)[3],
-            )
-          : 0;
-
-      const lltv =
-        params && params.length >= 5
-          ? Number(formatUnits((params as any)[4] as bigint, 18)) * 100
-          : 0;
-
-      if (collateral > 0 || borrowAssets > 0) {
-        setPositionData({
-          collateral,
-          borrow: borrowAssets,
-          oraclePrice: oPrice,
-          lltv,
-        });
+  // "setState during render" pattern to load history on address change
+  const [prevAddress, setPrevAddress] = useState(address);
+  if (prevAddress !== address) {
+    setPrevAddress(address);
+    if (address) {
+      const saved = localStorage.getItem(`vaultx_history_${address}`);
+      if (saved) {
+        try {
+          setHistory(JSON.parse(saved));
+        } catch (e) {
+          console.error("Failed to load history:", e);
+        }
       } else {
-        setPositionData(null);
+        setHistory([]);
       }
+    }
+  }
 
-      // 4. Fetch Pyth Prices
-      const [pXAUT, pUSDT] = await Promise.all([
-        getLatestPythPrice(APP_CONFIG.pythPriceFeedIds.XAUt0),
-        getLatestPythPrice(APP_CONFIG.pythPriceFeedIds.USDT0),
-      ]);
-      if (pXAUT > 0 && pUSDT > 0) {
-        setPythPrices({ XAUt0: pXAUT, USDT0: pUSDT });
+  // Data hooks (all fetched from backend APIs)
+  const {
+    data: position,
+    refetch: refetchPosition,
+  } = usePosition(address);
+  const { prices: pythPrices } = usePrices();
+  const {
+    data: balances,
+    isFetching: isRefreshing,
+    refetch: refetchBalances,
+  } = useTokenBalances(address as Address | undefined);
+
+  const balance = balances?.usdt0.formatted ?? "0";
+
+  const handleRefresh = () => {
+    refetchPosition();
+    refetchBalances();
+  };
+
+  // Position data from API
+  const positionData = position?.hasPosition
+    ? {
+        collateral: position.userCollateral,
+        borrow: position.userBorrow,
+        oraclePrice: position.oraclePrice,
+        lltv: position.lltv,
+        currentLTV: position.currentLTV,
       }
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [address]);
-
-  const checkSmartAccount = useCallback(async () => {
-    if (!address) return;
-    try {
-      const bytecode = await publicClient.getBytecode({
-        address: address as Address,
-      });
-      setIsSmartAccount(!!bytecode && bytecode !== "0x");
-    } catch (error) {
-      console.error("Error checking smart account:", error);
-    }
-  }, [address]);
-
-  useEffect(() => {
-    fetchData();
-    checkSmartAccount();
-  }, [fetchData, checkSmartAccount]);
+    : null;
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-8">
@@ -174,7 +108,7 @@ export function Dashboard() {
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-medium text-zinc-400">Net Worth</p>
                 <button
-                  onClick={fetchData}
+                  onClick={handleRefresh}
                   disabled={isRefreshing}
                   className="p-2 rounded-full h-8 w-8 hover:bg-white/5 flex items-center justify-center transition-colors disabled:opacity-50"
                 >
@@ -191,7 +125,7 @@ export function Dashboard() {
                 <span className="text-3xl sm:text-5xl font-bold text-white">
                   $
                   {(
-                    Number(balance.replace(/,/g, "")) * pythPrices.USDT0
+                    Number(balance) * pythPrices.USDT0
                   ).toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
@@ -350,27 +284,14 @@ export function Dashboard() {
                     <p
                       className={cn(
                         "text-xl font-bold transition-colors",
-                        (() => {
-                          const ltv =
-                            (positionData.borrow /
-                              (positionData.collateral *
-                                positionData.oraclePrice)) *
-                            100;
-                          if (ltv >= positionData.lltv * 0.95)
-                            return "text-red-400";
-                          if (ltv >= positionData.lltv * 0.9)
-                            return "text-amber-400";
-                          return "text-white";
-                        })(),
+                        positionData.currentLTV >= positionData.lltv * 0.95
+                          ? "text-red-400"
+                          : positionData.currentLTV >= positionData.lltv * 0.9
+                            ? "text-amber-400"
+                            : "text-white",
                       )}
                     >
-                      {(
-                        (positionData.borrow /
-                          (positionData.collateral *
-                            positionData.oraclePrice)) *
-                        100
-                      ).toFixed(2)}
-                      %
+                      {positionData.currentLTV.toFixed(2)}%
                     </p>
                   </div>
                 </div>
@@ -385,7 +306,7 @@ export function Dashboard() {
                 No active positions
               </h3>
               <p className="text-zinc-400 max-w-sm mb-6">
-                You don't have any active positions yet. Start by depositing
+                You don&apos;t have any active positions yet. Start by depositing
                 funds or taking a loan.
               </p>
               <Link

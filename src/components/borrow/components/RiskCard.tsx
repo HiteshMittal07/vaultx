@@ -1,4 +1,12 @@
-export function RiskCard({ icon, title, description }: any) {
+import { ReactNode } from "react";
+
+interface RiskCardProps {
+  icon: ReactNode;
+  title: string;
+  description: string;
+}
+
+export function RiskCard({ icon, title, description }: RiskCardProps) {
   return (
     <div className="p-4 rounded-2xl bg-zinc-900/40 border border-white/5">
       <div className="flex items-center gap-2 mb-2">
