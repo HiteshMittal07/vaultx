@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
       slippage = "5.0",
       deadline = "30",
       userAddress,
+      authorization,
     } = body;
 
     // Validate required fields
@@ -76,8 +77,8 @@ export async function POST(request: NextRequest) {
     // Build calls with quote
     const { calls, quote, amountOutMinimum } = await buildSwapCallsWithQuote(params);
 
-    // Prepare UserOp (without authorization - user will sign)
-    const userOp = await AAService.prepare(userAddress as Address, calls);
+    // Prepare UserOp (authorization needed for gas estimation on EOA wallets)
+    const userOp = await AAService.prepare(userAddress as Address, calls, authorization ?? undefined);
 
     // Serialize UserOp for JSON response
     const serializedUserOp = JSON.parse(JSON.stringify(userOp, bigIntReplacer));

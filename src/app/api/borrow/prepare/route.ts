@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       amount,
       max,
       userAddress,
+      authorization,
       // Combined action fields
       supplyAmount,
       borrowAmount,
@@ -144,8 +145,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Prepare UserOp (without authorization - user will sign)
-    const userOp = await AAService.prepare(userAddress as Address, calls);
+    // Prepare UserOp (authorization needed for gas estimation on EOA wallets)
+    const userOp = await AAService.prepare(userAddress as Address, calls, authorization ?? undefined);
 
     // Serialize UserOp for JSON response
     const serializedUserOp = JSON.parse(JSON.stringify(userOp, bigIntReplacer));

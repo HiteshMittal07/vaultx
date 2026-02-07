@@ -9,7 +9,8 @@ import {
 import { publicClient } from "@/lib/blockchain/client";
 import { bigIntReplacer } from "@/services/account-abstraction";
 import { arbitrum } from "@/constants/config";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useSign7702Authorization } from "@privy-io/react-auth";
+import { BICONOMY_NEXUS_V1_2_0 } from "@/constants/addresses";
 
 export type ExecutionMode = "online" | "offline";
 
@@ -26,9 +27,24 @@ interface UseTransactionExecutionOptions {
   onError?: (error: string) => void;
 }
 
-export function useTransactionExecution(options: UseTransactionExecutionOptions) {
+async function checkSmartAccount(address: Address) {
+  if (!address) return;
+  try {
+    const bytecode = await publicClient.getBytecode({
+      address: address as Address,
+    });
+    return !!bytecode && bytecode !== "0x";
+  } catch (error) {
+    console.error("Error checking smart account:", error);
+  }
+}
+
+export function useTransactionExecution(
+  options: UseTransactionExecutionOptions,
+) {
   const { address, signMessage, onSuccess, onError } = options;
   const { getAccessToken } = usePrivy();
+  const { signAuthorization } = useSign7702Authorization();
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("online");
 
@@ -38,7 +54,7 @@ export function useTransactionExecution(options: UseTransactionExecutionOptions)
   const executeOnline = useCallback(
     async (
       prepareEndpoint: string,
-      prepareBody: object
+      prepareBody: object,
     ): Promise<ExecutionResult> => {
       if (!address) {
         return { success: false, error: "No wallet address" };
@@ -52,17 +68,31 @@ export function useTransactionExecution(options: UseTransactionExecutionOptions)
         if (!accessToken) {
           return { success: false, error: "No access token" };
         }
-        // 1. Prepare UserOp via backend
+
+        let authorization;
+        const isSmartAccount = await checkSmartAccount(address);
+        if (!isSmartAccount) {
+          authorization = await signAuthorization({
+            contractAddress: BICONOMY_NEXUS_V1_2_0,
+            chainId: 42161, // Arbitrum Mainnet
+            nonce: 0, // Optional, defaults to current nonce
+          });
+        }
+        // 1. Prepare UserOp via backend (include authorization for gas estimation)
         const prepareResponse = await fetch(prepareEndpoint, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            ...prepareBody,
-            userAddress: address,
-          }),
+          body: JSON.stringify(
+            {
+              ...prepareBody,
+              userAddress: address,
+              authorization: authorization ?? null,
+            },
+            bigIntReplacer,
+          ),
         });
 
         const prepareData = await prepareResponse.json();
@@ -99,7 +129,7 @@ export function useTransactionExecution(options: UseTransactionExecutionOptions)
           body: JSON.stringify(
             {
               userOp: { ...unsignedUserOp, signature },
-              authorization: null,
+              authorization: authorization ?? null,
             },
             bigIntReplacer,
           ),
@@ -122,7 +152,7 @@ export function useTransactionExecution(options: UseTransactionExecutionOptions)
         setIsExecuting(false);
       }
     },
-    [address, signMessage, onSuccess, onError]
+    [address, signMessage, onSuccess, onError],
   );
 
   /**
@@ -140,7 +170,7 @@ export function useTransactionExecution(options: UseTransactionExecutionOptions)
     }): Promise<ExecutionResult> => {
       return executeOnline("/api/swap/prepare", params);
     },
-    [executeOnline]
+    [executeOnline],
   );
 
   /**
@@ -157,7 +187,7 @@ export function useTransactionExecution(options: UseTransactionExecutionOptions)
     }): Promise<ExecutionResult> => {
       return executeOnline("/api/borrow/prepare", params);
     },
-    [executeOnline]
+    [executeOnline],
   );
 
   return {
