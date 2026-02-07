@@ -1,5 +1,4 @@
 import { Address, Call, Authorization, UserOperation } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
 import { MOCK_SIGNATURE } from "./constants";
 import { encodeERC7579Calls } from "./utils";
 import { getPartialUserOp, estimateUserOpGas } from "./userOp";

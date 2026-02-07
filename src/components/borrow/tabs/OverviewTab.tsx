@@ -10,7 +10,13 @@ import { RiskCard } from "../components/RiskCard";
 import { LOGOS } from "@/constants/config";
 import { USDT0, XAUT0 } from "@/constants/addresses";
 
-export function OverviewTab({ utilization, oraclePrice, lltv }: any) {
+interface OverviewTabProps {
+  utilization: string;
+  oraclePrice: number;
+  lltv: number;
+}
+
+export function OverviewTab({ utilization, oraclePrice, lltv }: OverviewTabProps) {
   return (
     <div className="space-y-12">
       <div>

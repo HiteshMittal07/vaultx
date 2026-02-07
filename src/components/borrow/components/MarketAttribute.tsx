@@ -3,6 +3,17 @@ import { Info, Copy, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 
+interface MarketAttributeProps {
+  label: string;
+  value: string;
+  logo?: string;
+  simpleValue?: boolean;
+  hasInfo?: boolean;
+  infoText?: string;
+  href?: string;
+  onCopy?: () => void;
+}
+
 export function MarketAttribute({
   label,
   value,
@@ -12,7 +23,7 @@ export function MarketAttribute({
   infoText,
   href,
   onCopy,
-}: any) {
+}: MarketAttributeProps) {
   const [showInfo, setShowInfo] = useState(false);
 
   return (

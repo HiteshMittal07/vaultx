@@ -1,6 +1,11 @@
 import { RefreshCw, ExternalLink } from "lucide-react";
+import { TransactionHistoryItem } from "@/types";
 
-export function ActivityTab({ history }: { history: any[] }) {
+interface ActivityTabProps {
+  history: TransactionHistoryItem[];
+}
+
+export function ActivityTab({ history }: ActivityTabProps) {
   return (
     <div className="space-y-6 pt-4">
       <h3 className="text-xl text-white font-light">Your Transactions</h3>
