@@ -3,7 +3,6 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { motion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
-import { useSigners } from "@privy-io/react-auth";
 
 export function GetStartedButton() {
   const { login, ready, authenticated } = usePrivy();

@@ -13,10 +13,11 @@ pnpm test     # Run vitest tests
 
 ## Git Branches
 
-| Branch                          | Purpose                                              |
-| ------------------------------- | ---------------------------------------------------- |
-| `master`                        | Production-ready code                                |
-| `refactor-chain-ops-to-backend` | **Completed** — Blockchain calls moved to API routes |
+| Branch                                  | Purpose                                              |
+| --------------------------------------- | ---------------------------------------------------- |
+| `master`                                | Production-ready code                                |
+| `refactor-chain-ops-to-backend`         | **Completed** — Blockchain calls moved to API routes |
+| `backend-offline-transaction-execution` | **Active** — Backend offline transaction execution   |
 
 ## Stack
 
@@ -32,6 +33,7 @@ src/
 │   ├── dashboard/    # Portfolio overview
 │   └── api/          # Backend endpoints
 │       ├── aa/execute/      # UserOp relayer
+│       ├── borrow/          # Borrow operations
 │       ├── market/          # Morpho market data
 │       ├── positions/       # User position data
 │       ├── prices/          # Pyth oracle prices
@@ -39,7 +41,8 @@ src/
 │       └── swap/            # Quote + prepare
 ├── components/       # UI (borrow/, swap/, ui/, layout/)
 ├── services/
-│   └── account-abstraction/  # UserOp creation, signing, execution
+│   ├── account-abstraction/  # UserOp creation, signing, execution
+│   └── api/                  # API service layers (borrow, swap)
 ├── hooks/            # useTransactionExecution, usePythPrices, queries/
 ├── lib/              # blockchain/client.ts, calculations.ts
 └── constants/        # abis.ts, addresses.ts, config.ts
@@ -58,6 +61,8 @@ Components → hooks (`usePosition`, `useMarketData`) → `/api/*` routes → bl
 ## Key Files
 
 - `services/account-abstraction/aa.service.ts` — Core AA logic
+- `services/api/borrow.service.ts` — Borrow operations service layer
+- `services/api/swap.service.ts` — Swap operations service layer
 - `hooks/useTransactionExecution.ts` — Gasless TX hook
 - `components/borrow/BorrowDashboard.tsx` — Main lending interface
 - `lib/calculations.ts` — Market/position math (pure functions)
