@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@privy-io/node": "^0.1.0",
     "@privy-io/react-auth": "latest",
     "@privy-io/wagmi": "latest",
     "@tanstack/react-query": "^5.90.20",
@@ -17,6 +18,7 @@
     "dotenv": "^17.2.3",
     "framer-motion": "^12.29.2",
     "lucide-react": "^0.563.0",
+    "mongodb": "^7.1.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -25,7 +27,6 @@
     "viem": "^2.45.1"
   },
   "devDependencies": {
-    "@privy-io/node": "^0.1.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
