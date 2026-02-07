@@ -12,14 +12,15 @@ import {
 } from "@privy-io/react-auth";
 import { MARKET_ID } from "@/constants/addresses";
 import { LOGOS } from "@/constants/config";
+import { TransactionHistoryItem } from "@/types";
 import {
-  useLocalStorageHistory,
   useNotification,
   useTransactionExecution,
   useMarketData,
   usePrices,
   usePosition,
   useTokenBalances,
+  useTransactionHistory,
 } from "@/hooks";
 
 import { MetricStat } from "./components/MetricStat";
@@ -29,7 +30,6 @@ import { YourPositionTab } from "./tabs/YourPositionTab";
 import { SidebarActions } from "./sidebar";
 import { NotificationToast } from "@/components/ui/NotificationToast";
 import { useBorrowCalculations } from "./hooks/useBorrowCalculations";
-import { createBorrowHistoryEntry } from "@/hooks/useLocalStorageHistory";
 
 export function BorrowDashboard() {
   const { wallets } = useWallets();
@@ -60,7 +60,7 @@ export function BorrowDashboard() {
   );
 
   // Other hooks
-  const { history, addTransaction } = useLocalStorageHistory(address);
+  const { history, saveTransaction } = useTransactionHistory(address);
   const { notification, showSuccess, showError, dismiss } = useNotification();
 
   const searchParams = useSearchParams();
@@ -177,16 +177,16 @@ export function BorrowDashboard() {
         hType = "supply";
 
       showSuccess("Transaction confirmed!", result.txHash);
-      addTransaction(
-        createBorrowHistoryEntry(
-          result.txHash,
-          hType,
-          effectiveSupply,
-          effectiveBorrow,
-          effectiveRepay,
-          effectiveWithdraw
-        )
-      );
+      saveTransaction({
+        walletAddress: address,
+        action: hType as TransactionHistoryItem["type"],
+        txHash: result.txHash,
+        executedBy: "user",
+        supply: effectiveSupply || undefined,
+        borrow: effectiveBorrow || undefined,
+        repay: effectiveRepay || undefined,
+        withdraw: effectiveWithdraw || undefined,
+      });
       resetForm();
 
       // Refetch position and balances after transaction

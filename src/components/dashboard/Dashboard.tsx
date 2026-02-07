@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { ArrowRight, Wallet, HandCoins, RefreshCw } from "lucide-react";
+import { ArrowRight, Wallet, HandCoins, RefreshCw, Bot, User } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useWallets } from "@privy-io/react-auth";
@@ -14,8 +14,8 @@ import {
   usePosition,
   usePrices,
   useTokenBalances,
+  useTransactionHistory,
 } from "@/hooks";
-import { TransactionHistoryItem } from "@/types";
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState<"positions" | "history">(
@@ -26,25 +26,7 @@ export function Dashboard() {
     wallets.find((w) => w.walletClientType === "privy") || wallets[0];
   const address = wallet?.address;
 
-  const [history, setHistory] = useState<TransactionHistoryItem[]>([]);
-
-  // "setState during render" pattern to load history on address change
-  const [prevAddress, setPrevAddress] = useState(address);
-  if (prevAddress !== address) {
-    setPrevAddress(address);
-    if (address) {
-      const saved = localStorage.getItem(`vaultx_history_${address}`);
-      if (saved) {
-        try {
-          setHistory(JSON.parse(saved));
-        } catch (e) {
-          console.error("Failed to load history:", e);
-        }
-      } else {
-        setHistory([]);
-      }
-    }
-  }
+  const { history } = useTransactionHistory(address);
 
   // Data hooks (all fetched from backend APIs)
   const {
@@ -331,9 +313,25 @@ export function Dashboard() {
                         <RefreshCw className="h-4 w-4 text-emerald-400" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-white capitalize">
-                          {tx.type} Successful
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-white capitalize">
+                            {tx.type} Successful
+                          </p>
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              tx.executedBy === "vaultx-agent"
+                                ? "bg-purple-500/10 text-purple-400"
+                                : "bg-emerald-500/10 text-emerald-400"
+                            }`}
+                          >
+                            {tx.executedBy === "vaultx-agent" ? (
+                              <Bot className="h-3 w-3" />
+                            ) : (
+                              <User className="h-3 w-3" />
+                            )}
+                            {tx.executedBy === "vaultx-agent" ? "VaultX Agent" : "You"}
+                          </span>
+                        </div>
                         <p className="text-[10px] text-zinc-500 font-mono">
                           {tx.timestamp}
                         </p>

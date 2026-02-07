@@ -33,15 +33,17 @@ export type TransactionType =
   | "withdraw";
 
 export type TransactionStatus = "pending" | "success" | "failed";
+export type ExecutedBy = "user" | "vaultx-agent";
 
 export interface TransactionHistoryItem {
   id: string;
   type: TransactionType;
   timestamp: string;
   status: TransactionStatus;
-  // Swap-specific fields
-  tokenIn?: TokenSymbol;
-  tokenOut?: TokenSymbol;
+  executedBy: ExecutedBy;
+  // Swap-specific fields (addresses, resolved to symbols on frontend)
+  tokenIn?: string;
+  tokenOut?: string;
   amountIn?: string;
   amountOut?: string;
   // Borrow-specific fields

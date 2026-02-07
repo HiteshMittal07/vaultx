@@ -15,11 +15,11 @@ import {
 import { USDT0, XAUT0 } from "@/constants/addresses";
 import { TokenInfo } from "@/types";
 import {
-  useLocalStorageHistory,
   usePrices,
   useNotification,
   useTokenBalances,
   useTransactionExecution,
+  useTransactionHistory,
 } from "@/hooks";
 
 import { SwapHeader } from "./SwapHeader";
@@ -29,7 +29,6 @@ import { SwapDetails } from "./SwapDetails";
 import { SwapButton } from "./SwapButton";
 import { useSwapQuote } from "./hooks/useSwapQuote";
 import { InlineNotificationToast } from "@/components/ui/NotificationToast";
-import { createSwapHistoryEntry } from "@/hooks/useLocalStorageHistory";
 
 const TOKEN_USDT0: TokenInfo = {
   symbol: "USDT0",
@@ -66,7 +65,7 @@ export function SwapCard() {
 
   // Custom hooks
   const { prices: pythPrices } = usePrices();
-  const { addTransaction } = useLocalStorageHistory(address);
+  const { saveTransaction } = useTransactionHistory(address);
   const { notification, showSuccess, showError, dismiss } = useNotification();
 
   // Token balances query
@@ -152,15 +151,16 @@ export function SwapCard() {
 
     if (result.success && result.txHash) {
       showSuccess("Swap confirmed!", result.txHash);
-      addTransaction(
-        createSwapHistoryEntry(
-          result.txHash,
-          tokenIn,
-          tokenOut,
-          sellAmount,
-          buyAmount
-        )
-      );
+      saveTransaction({
+        walletAddress: address!,
+        action: "swap",
+        txHash: result.txHash,
+        executedBy: "user",
+        tokenIn: tokenIn.address,
+        tokenOut: tokenOut.address,
+        amountIn: sellAmount,
+        amountOut: buyAmount,
+      });
       refetchBalances();
       setSellAmount("");
     } else if (result.error) {
@@ -176,8 +176,9 @@ export function SwapCard() {
     tokenOut,
     showSuccess,
     showError,
-    addTransaction,
+    saveTransaction,
     refetchBalances,
+    address,
   ]);
 
   // Handle token switch

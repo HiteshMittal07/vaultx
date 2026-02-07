@@ -19,6 +19,7 @@ import {
 } from "@/lib/blockchain/utils";
 import { MorphoMarketParamsRaw } from "@/types";
 import { MARKET_ID } from "@/constants/addresses";
+import { getDb } from "@/lib/mongodb";
 
 /** Maximum allowed amount per offline transaction (application-level limit). */
 const MAX_AMOUNT_PER_TX = 1000;
@@ -73,6 +74,44 @@ export async function POST(request: NextRequest) {
       userAddress as Address,
       calls
     );
+
+    // Save transaction history to MongoDB
+    try {
+      const db = await getDb();
+      const historyEntry: Record<string, unknown> = {
+        walletAddress: (userAddress as string).toLowerCase(),
+        txHash,
+        executedBy: "vaultx-agent",
+        status: "success",
+        timestamp: new Date(),
+      };
+
+      if (type === "swap") {
+        historyEntry.action = "swap";
+        historyEntry.tokenIn = params.tokenIn;
+        historyEntry.tokenOut = params.tokenOut;
+        historyEntry.amountIn = params.amountIn;
+        historyEntry.amountOut = params.amountOut;
+      } else if (type === "borrow") {
+        // Determine specific action from params
+        const { action, supplyAmount, borrowAmount, repayAmount, withdrawAmount } = params;
+        if (action) {
+          historyEntry.action = action;
+        } else if (repayAmount || withdrawAmount) {
+          historyEntry.action = withdrawAmount && Number(withdrawAmount) > 0 ? "withdraw" : "repay";
+        } else if (supplyAmount || borrowAmount) {
+          historyEntry.action = borrowAmount && Number(borrowAmount) > 0 ? "borrow" : "supply";
+        }
+        historyEntry.supply = supplyAmount;
+        historyEntry.borrow = borrowAmount;
+        historyEntry.repay = repayAmount;
+        historyEntry.withdraw = withdrawAmount;
+      }
+
+      await db.collection("transaction_history").insertOne(historyEntry);
+    } catch (historyError) {
+      console.error("[API] Failed to save offline history:", historyError);
+    }
 
     return NextResponse.json({ txHash, userOpHash });
   } catch (error: unknown) {

@@ -13,3 +13,4 @@ export {
 export { useMarketData } from "./useMarketData";
 export { usePrices } from "./usePrices";
 export { usePosition, useInvalidatePosition } from "./usePosition";
+export { useTransactionHistory } from "./useTransactionHistory";
