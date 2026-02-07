@@ -13,11 +13,10 @@ pnpm test     # Run vitest tests
 
 ## Git Branches
 
-| Branch                          | Purpose                                                            |
-| ------------------------------- | ------------------------------------------------------------------ |
-| `master`                        | Production-ready code                                              |
-| `refactor-chain-ops-to-backend` | **Active** — Moving blockchain calls to API routes (see `plan.md`) |
-| `code-optimization`             | Performance improvements                                           |
+| Branch                          | Purpose                                              |
+| ------------------------------- | ---------------------------------------------------- |
+| `master`                        | Production-ready code                                |
+| `refactor-chain-ops-to-backend` | **Completed** — Blockchain calls moved to API routes |
 
 ## Stack
 
@@ -70,7 +69,3 @@ Components → hooks (`usePosition`, `useMarketData`) → `/api/*` routes → bl
 - **Swaps:** Uniswap V3
 - **Oracles:** Pyth Network
 - **AA:** Biconomy Nexus + custom bundler
-
-## Current Work
-
-See `plan.md` for backend API migration (moving blockchain calls from frontend to API routes).
