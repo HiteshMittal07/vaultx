@@ -13,11 +13,11 @@ pnpm test     # Run vitest tests
 
 ## Git Branches
 
-| Branch                                  | Purpose                                              |
-| --------------------------------------- | ---------------------------------------------------- |
-| `master`                                | Production-ready code                                |
-| `refactor-chain-ops-to-backend`         | **Completed** — Blockchain calls moved to API routes |
-| `backend-offline-transaction-execution` | **Active** — Backend offline transaction execution   |
+| Branch                                  | Purpose                                            |
+| --------------------------------------- | -------------------------------------------------- |
+| `master`                                | **Active** — Production-ready code                 |
+| `refactor-chain-ops-to-backend`         | **Merged** — Blockchain calls moved to API routes  |
+| `backend-offline-transaction-execution` | **Merged** — Backend offline transaction execution |
 
 ## Stack
 
@@ -34,6 +34,7 @@ src/
 │   └── api/          # Backend endpoints
 │       ├── aa/execute/      # UserOp relayer
 │       ├── borrow/          # Borrow operations
+│       ├── history/         # Transaction history
 │       ├── market/          # Morpho market data
 │       ├── positions/       # User position data
 │       ├── prices/          # Pyth oracle prices
@@ -42,9 +43,13 @@ src/
 ├── components/       # UI (borrow/, swap/, ui/, layout/)
 ├── services/
 │   ├── account-abstraction/  # UserOp creation, signing, execution
-│   └── api/                  # API service layers (borrow, swap)
+│   ├── api/                  # API service layers (borrow, swap)
+│   └── privy/                # Privy auth utilities
 ├── hooks/            # useTransactionExecution, usePythPrices, queries/
 ├── lib/              # blockchain/client.ts, calculations.ts
+├── config/           # App configuration
+├── providers/        # React context providers
+├── types/            # TypeScript type definitions
 └── constants/        # abis.ts, addresses.ts, config.ts
 ```
 
