@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { Navbar } from "@/components/ui/Navbar";
 import { GlassSphere, BackgroundGradients } from "@/components/ui/GlassEffects";
 import { cn } from "@/lib/utils";
+import { useServerSigner } from "@/hooks/useServerSigner";
 
 interface AuthPageWrapperProps {
   children: ReactNode;
@@ -21,6 +22,7 @@ export function AuthPageWrapper({
 }: AuthPageWrapperProps) {
   const { ready, authenticated } = usePrivy();
   const router = useRouter();
+  useServerSigner();
 
   useEffect(() => {
     if (ready && !authenticated) {
