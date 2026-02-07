@@ -3,9 +3,13 @@ import {
   AAService,
   parseUserOpWithBigInt,
 } from "@/services/account-abstraction";
+import { verifyAuth } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
+    const auth = await verifyAuth(req);
+    if (auth instanceof NextResponse) return auth;
+
     const { userOp, authorization } = await req.json();
 
     if (!userOp) {
@@ -19,11 +23,10 @@ export async function POST(req: Request) {
     const txHash = await AAService.execute(refinedUserOp, authorization);
 
     return NextResponse.json({ txHash });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[API] AA Execution error:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to execute transaction" },
-      { status: 500 },
-    );
+    const message =
+      error instanceof Error ? error.message : "Failed to execute transaction";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
