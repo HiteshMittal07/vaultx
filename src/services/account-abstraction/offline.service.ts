@@ -4,10 +4,13 @@ import {
   getUserOperationHash,
 } from "viem/account-abstraction";
 import { arbitrum } from "@/constants/config";
+import { publicClient } from "@/lib/blockchain/client";
+import { BICONOMY_NEXUS_V1_2_0 } from "@/constants/addresses";
 import { AAService } from "./aa.service";
 import {
   getPrivyWalletId,
   signUserOpHash,
+  sign7702AuthorizationServer,
 } from "@/services/privy/privy.server";
 
 export interface OfflineExecutionResult {
@@ -16,17 +19,43 @@ export interface OfflineExecutionResult {
 }
 
 /**
+ * Checks if the given address has contract code deployed (i.e. is a smart account).
+ */
+async function isSmartAccount(address: Address): Promise<boolean> {
+  const bytecode = await publicClient.getBytecode({ address });
+  return !!bytecode && bytecode !== "0x";
+}
+
+/**
  * Executes a transaction offline (without user in the loop).
  * Combines prepare + sign (via Privy authorization key) + execute (via relayer).
+ *
+ * If the wallet is still an EOA, signs an EIP-7702 authorization to delegate
+ * it to Biconomy Nexus before preparing and executing the UserOp.
  */
 export async function executeOffline(
   walletAddress: Address,
   calls: Call[]
 ): Promise<OfflineExecutionResult> {
-  // 1. Prepare UserOp (reuses existing AAService.prepare)
-  const userOp = await AAService.prepare(walletAddress, calls);
+  // 0. Get Privy wallet ID (needed for both authorization signing and UserOp signing)
+  const walletId = await getPrivyWalletId(walletAddress);
 
-  // 2. Compute UserOp hash
+  // 1. Check if wallet needs EIP-7702 authorization (EOA → smart account)
+  let authorization;
+  const smart = await isSmartAccount(walletAddress);
+  if (!smart) {
+    console.log("[Offline] Wallet is EOA, signing EIP-7702 authorization...");
+    authorization = await sign7702AuthorizationServer(
+      walletId,
+      BICONOMY_NEXUS_V1_2_0,
+      arbitrum.id,
+    );
+  }
+
+  // 2. Prepare UserOp (pass authorization for gas estimation state override)
+  const userOp = await AAService.prepare(walletAddress, calls, authorization);
+
+  // 3. Compute UserOp hash
   const userOpHash = getUserOperationHash({
     chainId: arbitrum.id,
     entryPointAddress: entryPoint07Address,
@@ -37,15 +66,12 @@ export async function executeOffline(
     },
   });
 
-  // 3. Get Privy wallet ID from Ethereum address
-  const walletId = await getPrivyWalletId(walletAddress);
-
   // 4. Sign UserOp hash via Privy server SDK (authorization key)
   const signature = await signUserOpHash(walletId, userOpHash);
 
-  // 5. Execute signed UserOp via relayer (reuses existing AAService.execute)
+  // 5. Execute signed UserOp via relayer (pass authorization for authorizationList)
   const signedUserOp = { ...userOp, signature };
-  const txHash = await AAService.execute(signedUserOp);
+  const txHash = await AAService.execute(signedUserOp, authorization);
 
   return { txHash, userOpHash };
 }

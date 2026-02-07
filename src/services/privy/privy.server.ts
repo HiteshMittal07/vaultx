@@ -1,5 +1,5 @@
 import { PrivyClient } from "@privy-io/node";
-import { Hex } from "viem";
+import { Authorization, Hex } from "viem";
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID!;
 const PRIVY_APP_SECRET = process.env.APP_SECRET!;
@@ -107,6 +107,41 @@ export async function signUserOpHash(
     });
 
   return response.signature as Hex;
+}
+
+/**
+ * Signs an EIP-7702 authorization via Privy server SDK.
+ *
+ * Used in the offline flow when the user's wallet is still an EOA
+ * (no delegation bytecode yet). The authorization delegates the EOA
+ * to Biconomy Nexus so it can execute UserOps.
+ */
+export async function sign7702AuthorizationServer(
+  walletId: string,
+  contractAddress: string,
+  chainId: number,
+): Promise<Authorization> {
+  const response = await privy
+    .wallets()
+    .ethereum()
+    .sign7702Authorization(walletId, {
+      params: {
+        contract: contractAddress,
+        chain_id: chainId,
+      },
+      authorization_context: {
+        authorization_private_keys: [AUTHORIZATION_PRIVATE_KEY],
+      },
+    });
+
+  return {
+    address: response.authorization.contract as `0x${string}`,
+    chainId: Number(response.authorization.chain_id),
+    nonce: Number(response.authorization.nonce),
+    r: response.authorization.r as `0x${string}`,
+    s: response.authorization.s as `0x${string}`,
+    yParity: response.authorization.y_parity,
+  };
 }
 
 export { privy };
