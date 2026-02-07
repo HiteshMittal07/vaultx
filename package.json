@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@privy-io/node": "^0.1.0",
+    "@privy-io/node": "latest",
     "@privy-io/react-auth": "latest",
     "@privy-io/wagmi": "latest",
     "@tanstack/react-query": "^5.90.20",
