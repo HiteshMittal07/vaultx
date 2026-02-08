@@ -1,91 +1,126 @@
 # VaultX
 
-**VaultX** is a next-generation DeFi borrowing application built on **Arbitrum**, offering a seamless, **gasless user experience** powered by Account Abstraction. Users can sign up with just an email, deposit USDT, and instantly access liquidity by borrowing against Gold (XAUt) without ever managing distinct gas tokens or complex wallet approvals.
+**VaultX** is a DeFi lending and swap platform on **Arbitrum** with a fully gasless UX powered by Account Abstraction (EIP-7702). Users sign up with email, deposit collateral, borrow stablecoins, and swap tokens — without ever holding ETH for gas.
+
+The backend exposes a complete API surface for both **interactive** (user-signed) and **offline** (agent-driven) transaction execution, making it suitable for autonomous DeFi agents.
 
 ---
 
-## Key Features
+## Features
 
-### Seamless Authentication & Smart Wallets
-
-- **Email-Based Login**: Powered by **[Privy](https://www.privy.io/)**, allowing users to onboard instantly without needing a pre-existing Web3 wallet.
-- **Smart Accounts**: Integrates **[Biconomy Nexus](https://biconomy.io/)** (EIP-7702) to upgrade user accounts into smart wallets.
-- **Gasless Transactions**: All interactions are gas-sponsored via a custom backend relay, removing the barrier of holding ETH for fees.
-
-### Core DeFi Capabilities
-
-- **One-Click Swaps**: Integrated **Uniswap V3** Universal Router for efficient, atomic swaps between USDT and XAUt0.
-- **Lending & Borrowing**: Direct integration with **[Morpho Blue](https://morpho.org/)** on Arbitrum (XAUt0/USDT0 market).
-- **Precision Management**:
-  - **Risk-Aware LTV**: Real-time Loan-to-Value monitoring with dynamic color-coding (Safe/Warning/Danger).
-  - **Auto-Calculated Max**: Smart "MAX" buttons for Repay and Withdraw that handle collateral precision (6 decimals) and prevent dust.
-  - **Safety Guards**: Prevents over-repayment and under-collateralized borrowing attempts.
-
-### Real-Time Data through Oracles
-
-- **Pyth Network**: Fetches sub-second price updates for XAUt and USDT to ensure accurate portfolio valuation and liquidation risk assessment.
+- **Email Onboarding** — Privy authentication, no browser wallet required
+- **Smart Accounts** — Biconomy Nexus (EIP-7702) upgrades EOAs into smart accounts
+- **Gasless Transactions** — Backend relay sponsors all gas fees
+- **Lending & Borrowing** — Morpho Blue integration (XAUt collateral → USDT loans)
+- **Token Swaps** — Uniswap V3 with slippage protection
+- **Real-Time Oracles** — Pyth Network price feeds for XAUt and USDT
+- **Offline Execution** — Internal API for agents to execute transactions on behalf of users
+- **Auto-Rebalancing** — Cron-driven position monitoring with atomic deleverage (withdraw → swap → repay in one tx)
+- **Security Hardening** — Rate limiting, Zod validation, address ownership checks, audit logging
+- **Agent Policy Management** — Users can approve/revoke agent delegation from the UI
 
 ---
 
 ## Tech Stack
 
-- **Framework**: [Next.js 16](https://nextjs.org/) (App Router)
-- **Language**: TypeScript / React 19
-- **Styling**: Tailwind CSS 4, Framer Motion (Glassmorphism UI)
-- **Blockchain Interaction**: [Viem](https://viem.sh/) (with Experimental Account Abstraction features)
-- **Auth**: @privy-io/react-auth
-- **DeFi Integrations**:
-  - Uniswap V3 SDK / Quoter
-  - Morpho Blue Contracts
-  - Pyth Hermes API
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| Language | TypeScript, React 19 |
+| Styling | Tailwind CSS 4, Framer Motion |
+| Blockchain | Viem 2.x |
+| Auth | Privy (@privy-io/react-auth + @privy-io/node) |
+| Account Abstraction | Biconomy Nexus (EIP-7702) |
+| Lending | Morpho Blue |
+| Swaps | Uniswap V3 (Quoter + SwapRouter) |
+| Oracles | Pyth Network (Hermes API) |
+| Database | MongoDB |
+| Validation | Zod |
+| State Management | TanStack React Query |
+| Testing | Vitest |
 
 ---
 
-## Code Architecture
+## Architecture
 
-The codebase is organized to separate UI concerns from blockchain logic and backend services.
+```
+src/
+├── app/                          # Next.js pages + API routes
+│   ├── borrow/                   # Lending market UI
+│   ├── swap/                     # Token swap UI
+│   ├── dashboard/                # Portfolio overview
+│   ├── policy/                   # Agent delegation management
+│   └── api/                      # Backend endpoints (see API Reference)
+│       ├── aa/execute/           # UserOp relay (online)
+│       ├── aa/execute-offline/   # Agent execution (offline)
+│       ├── borrow/prepare/       # Build borrow UserOps
+│       ├── swap/prepare/         # Build swap UserOps
+│       ├── swap/quote/           # Uniswap V3 quotes
+│       ├── cron/monitor-positions/ # Auto-rebalancing cron job
+│       ├── balances/             # Token balances
+│       ├── positions/            # Morpho user positions
+│       ├── history/              # Transaction history
+│       ├── market/               # Morpho market data
+│       └── prices/               # Pyth oracle prices
+├── components/                   # UI components
+│   ├── borrow/                   # Lending interface + sub-components
+│   ├── swap/                     # Swap interface + sub-components
+│   ├── dashboard/                # Portfolio dashboard
+│   └── ui/                       # Shared UI (Navbar, Toast, Skeleton)
+├── services/
+│   ├── account-abstraction/      # UserOp creation, signing, relay
+│   ├── api/                      # Borrow, swap, rebalance, policy service layers
+│   └── privy/                    # Privy server-side utilities
+├── hooks/                        # React hooks
+│   ├── useTransactionExecution   # Gasless TX orchestration
+│   ├── useDelegationStatus       # Agent delegation state
+│   └── queries/                  # React Query hooks (positions, balances, etc.)
+├── lib/                          # Utilities
+│   ├── blockchain/               # Viem client + helpers
+│   ├── auth.ts                   # Token verification + address ownership
+│   ├── validation.ts             # Zod request schemas
+│   ├── rate-limit.ts             # Sliding-window rate limiter
+│   ├── audit.ts                  # Security audit logging
+│   ├── mongodb.ts                # Database connection
+│   └── calculations.ts           # Pure math (LTV, liquidation, etc.)
+├── constants/                    # ABIs, contract addresses, config
+├── providers/                    # React context providers
+└── types/                        # TypeScript type definitions
+```
 
-### Directory Structure
+### Transaction Flow
 
-- **`src/app/`**: Next.js App Router pages and layouts.
-  - `dashboard/`: Main user dashboard page.
-  - `borrow/`: Borrowing market interface.
-  - `swap/`: Token swap interface.
-  - `api/`: Server-side API routes (e.g., for AA relay).
+**Online (user-signed):**
+```
+UI Action → /api/borrow/prepare (or /api/swap/prepare)
+         → Returns unsigned UserOp
+         → User signs via Privy signer
+         → /api/aa/execute relays to chain
+         → Transaction confirmed
+```
 
-- **`src/components/`**: Reusable UI components.
-  - **`borrow/`**: Logic for the lending/borrowing market.
-    - `BorrowDashboard.tsx`: Main controller component for state and data fetching.
-    - `SidebarActions.tsx`: Handles user input and transaction submission (Supply/Borrow/Repay/Withdraw).
-    - `tabs/`: Modularized tab contents (Overview, Position, Activity).
-    - `components/`: Shared localized components (MetricStat, RiskCard).
-  - **`swap/`**: Swap interface components.
-    - `SwapCard.tsx`: Handles Uniswap V3 interaction, quoting, and executing swaps.
-  - **`dashboard/`**: Components for the main portfolio dashboard view.
+**Offline (agent-driven):**
+```
+Agent → /api/aa/execute-offline (with X-Internal-Key)
+     → Backend builds calls, validates against policy
+     → Signs via Privy server-side signer
+     → Relays to chain
+     → Transaction confirmed + audit logged
+```
 
-- **`src/services/`**: Backend business logic.
-  - **`account-abstraction/`**: Handles Smart Account logic.
-    - `index.ts`: Service for preparing and executing EIP-7702 UserOperations.
-    - Uses Biconomy Nexus and custombundler logic for gas sponsorship.
-
-- **`src/lib/`**: Shared utilities.
-  - **`blockchain/`**: Blockchain-specific helpers.
-    - `client.ts`: Viem publicClient configuration.
-    - `utils.ts`: Helper functions for fetching token balances, Morpho market data, and Pyth prices.
-
-- **`src/constants/`**:
-  - `abis.ts`: Contract ABIs (ERC20, Morpho, etc.).
-  - `addresses.ts`: Contract addresses for Arbitrum.
-
----
-
-## Architecture Flow
-
-The application uses a hybrid architecture to ensure a Web2-like experience on Web3 rails:
-
-1.  **Frontend**: Constructs `UserOperations` (UserOps) for batch transactions (e.g., Approve + Swap, or Approve + Supply + Borrow).
-2.  **Signing**: Users sign these ops via their embedded Privy signer (Passkey/Email).
-3.  **Backend Relay**: A protected API route (`/api/aa/execute`) receives the signed UserOp and executes it on-chain and relaying makes it gasless for user.
+**Auto-Rebalancing (cron-driven):**
+```
+Vercel Cron (every 5 min) → GET /api/cron/monitor-positions
+  → Discover users from transaction_history
+  → For each user with active position:
+      1. Fetch position health from Morpho (on-chain)
+      2. If LTV > 60% threshold (LLTV is 77%):
+         → Withdraw XAUT collateral
+         → Swap XAUT → USDT via Uniswap V3
+         → Repay USDT debt
+         (all 5 calls in one atomic UserOp)
+      3. Log result to rebalance_log + audit_log
+```
 
 ---
 
@@ -98,39 +133,502 @@ The application uses a hybrid architecture to ensure a Web2-like experience on W
 
 ### Installation
 
-1.  **Clone the repository:**
+```bash
+git clone https://github.com/HiteshMittal07/vaultx.git
+cd vaultx
+pnpm install
+```
 
-    ```bash
-    git clone https://github.com/yourusername/vaultx.git
-    cd vaultx
-    ```
+### Environment Variables
 
-2.  **Install dependencies:**
+Copy the example and fill in your values:
 
-    ```bash
-    pnpm install
-    ```
+```bash
+cp .env.example .env
+```
 
-3.  **Environment Configuration:**
-    Create a `.env` file in the root directory:
+| Variable | Description | Required |
+|---|---|---|
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Privy app ID from [dashboard.privy.io](https://dashboard.privy.io) | Yes |
+| `NEXT_PUBLIC_AUTHORIZATION_KEY_ID` | Quorum ID for the EIP-7702 authorization signer | Yes |
+| `APP_SECRET` | Privy app secret for server-side token verification | Yes |
+| `PRIVATE_KEY` | Hex private key (`0x...`) for the relay wallet that submits UserOps | Yes |
+| `AUTHORIZATION_PRIVATE_KEY` | ECDSA private key (PEM format) for signing EIP-7702 authorizations | Yes |
+| `MONGODB_URI` | MongoDB connection string (`mongodb+srv://...`) | Yes |
+| `INTERNAL_API_KEY` | API key for internal-only endpoints (offline execution) | Yes |
+| `CRON_SECRET` | Secret for Vercel Cron job authentication (`openssl rand -base64 32`) | Yes |
 
-    ```bash
-    cp .env.example .env
-    ```
+### Run
 
-    Ensure you have the following variables set:
+```bash
+pnpm dev       # Start dev server at http://localhost:3000
+pnpm build     # Production build
+pnpm lint      # ESLint check
+pnpm test      # Run vitest tests
+```
 
-    ```env
-    NEXT_PUBLIC_PRIVY_APP_ID=your_privy_app_id
-    ```
+---
 
-4.  **Run the development server:**
+## API Reference
 
-    ```bash
-    pnpm dev
-    ```
+All authenticated endpoints require a Privy access token in the `Authorization` header:
+```
+Authorization: Bearer <privy_access_token>
+```
 
-5.  Open [http://localhost:3000](http://localhost:3000) to view the app.
+The offline execution endpoint uses an internal API key instead:
+```
+X-Internal-Key: <INTERNAL_API_KEY>
+```
+
+### Authentication & Security
+
+| Mechanism | Description |
+|---|---|
+| **Bearer Auth** | Privy access token verification via `verifyAuth()` |
+| **Address Ownership** | Validates the queried address belongs to the authenticated user |
+| **Internal Key** | `X-Internal-Key` header for internal-only endpoints |
+| **Rate Limiting** | Sliding-window limiter (execute: 5/min, prepare: 10/min per user) |
+| **Input Validation** | Zod schemas on all mutation endpoints |
+| **Audit Logging** | Security events written to MongoDB `audit_log` collection |
+
+---
+
+### Public Endpoints
+
+#### `GET /api/market`
+
+Returns Morpho Blue market data. No authentication required.
+
+**Response:**
+```json
+{
+  "totalMarketSize": "1500000.00",
+  "totalLiquidity": "800000.00",
+  "borrowedFunds": "700000.00",
+  "utilization": "0.4667",
+  "borrowRate": "0.0342",
+  "oraclePrice": 2945.50,
+  "lltv": "0.77",
+  "timestamp": 1707350400000
+}
+```
+
+---
+
+#### `GET /api/prices`
+
+Returns current Pyth oracle prices for XAUt and USDT. No authentication required.
+
+**Response:**
+```json
+{
+  "XAUt0": {
+    "price": 2945.50,
+    "publishTime": 1707350400,
+    "exponent": -8,
+    "confidence": 1.25
+  },
+  "USDT0": {
+    "price": 1.0001,
+    "publishTime": 1707350400,
+    "exponent": -8,
+    "confidence": 0.0002
+  },
+  "timestamp": 1707350400000
+}
+```
+
+---
+
+#### `GET /api/swap/quote`
+
+Returns a Uniswap V3 quote. No authentication required.
+
+**Query Parameters:**
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `tokenIn` | `Address` | Yes | — | Input token address |
+| `tokenOut` | `Address` | Yes | — | Output token address |
+| `amountIn` | `string` | Yes | — | Amount in human-readable units |
+| `decimalsIn` | `number` | No | `6` | Input token decimals |
+| `decimalsOut` | `number` | No | `6` | Output token decimals |
+
+**Response:**
+```json
+{
+  "amountOut": "3412.580000",
+  "timestamp": 1707350400000
+}
+```
+
+---
+
+### Authenticated Endpoints
+
+All endpoints below require `Authorization: Bearer <token>`.
+
+#### `GET /api/balances`
+
+Returns USDT and XAUt balances for the authenticated user's address.
+
+**Query Parameters:**
+
+| Param | Type | Required | Description |
+|---|---|---|---|
+| `address` | `Address` | Yes | Wallet address (must belong to authenticated user) |
+
+**Response:**
+```json
+{
+  "usdt0": {
+    "raw": "1500000000",
+    "formatted": "1500.000000",
+    "decimals": 6
+  },
+  "xaut0": {
+    "raw": "500000",
+    "formatted": "0.500000",
+    "decimals": 6
+  },
+  "timestamp": 1707350400000
+}
+```
+
+---
+
+#### `GET /api/positions`
+
+Returns the user's Morpho lending position with risk metrics.
+
+**Query Parameters:**
+
+| Param | Type | Required | Description |
+|---|---|---|---|
+| `address` | `Address` | Yes | Wallet address (must belong to authenticated user) |
+
+**Response:**
+```json
+{
+  "userCollateral": "500000",
+  "userBorrow": "750000000",
+  "currentLTV": 0.51,
+  "lltv": "0.77",
+  "liquidationPrice": 1948.05,
+  "percentDropToLiquidation": 33.85,
+  "maxWithdrawable": "150000",
+  "oraclePrice": 2945.50,
+  "hasPosition": true,
+  "timestamp": 1707350400000
+}
+```
+
+---
+
+#### `GET /api/history`
+
+Returns transaction history for the authenticated user.
+
+**Query Parameters:**
+
+| Param | Type | Required | Description |
+|---|---|---|---|
+| `walletAddress` | `Address` | Yes | Wallet address (must belong to authenticated user) |
+
+**Response:**
+```json
+[
+  {
+    "id": "0xabc...123",
+    "txHash": "0xabc...123",
+    "action": "borrow",
+    "executedBy": "user",
+    "status": "success",
+    "timestamp": "2025-02-08T12:00:00.000Z"
+  }
+]
+```
+
+---
+
+#### `POST /api/history`
+
+Saves a transaction history entry.
+
+**Request Body:**
+```json
+{
+  "walletAddress": "0x...",
+  "action": "borrow",
+  "txHash": "0xabc...123",
+  "executedBy": "vaultx-agent",
+  "status": "success"
+}
+```
+
+**Response:**
+```json
+{ "success": true }
+```
+
+---
+
+### Transaction Endpoints
+
+#### `POST /api/borrow/prepare`
+
+Builds an unsigned UserOp for lending operations. Rate limited to **10 req/min** per user.
+
+**Request Body:**
+```json
+{
+  "userAddress": "0x...",
+  "authorization": {},
+
+  "action": "supply",
+  "amount": "1.5",
+  "max": false,
+
+  "supplyAmount": "1.5",
+  "borrowAmount": "1000",
+  "repayAmount": "500",
+  "withdrawAmount": "0.5",
+  "repayMax": false,
+  "withdrawMax": false
+}
+```
+
+Use either single-action mode (`action` + `amount`) or combined mode (`supplyAmount`, `borrowAmount`, etc.) for batched operations.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `userAddress` | `Address` | Yes | User's wallet address |
+| `authorization` | `object` | No | EIP-7702 authorization (for first-time smart account setup) |
+| `action` | `string` | No | `"supply"` \| `"borrow"` \| `"repay"` \| `"withdraw"` |
+| `amount` | `string` | No | Amount in human-readable units |
+| `max` | `boolean` | No | Use maximum available amount |
+| `supplyAmount` | `string` | No | Supply amount (combined mode) |
+| `borrowAmount` | `string` | No | Borrow amount (combined mode) |
+| `repayAmount` | `string` | No | Repay amount (combined mode) |
+| `withdrawAmount` | `string` | No | Withdraw amount (combined mode) |
+| `repayMax` | `boolean` | No | Repay full debt |
+| `withdrawMax` | `boolean` | No | Withdraw all collateral |
+
+**Response:**
+```json
+{
+  "unsignedUserOp": {
+    "sender": "0x...",
+    "nonce": "1",
+    "callData": "0x...",
+    "callGasLimit": "200000",
+    "verificationGasLimit": "100000",
+    "preVerificationGas": "50000",
+    "maxFeePerGas": "0",
+    "maxPriorityFeePerGas": "0",
+    "signature": "0x"
+  }
+}
+```
+
+---
+
+#### `POST /api/swap/prepare`
+
+Builds an unsigned UserOp for a token swap. Rate limited to **10 req/min** per user.
+
+**Request Body:**
+```json
+{
+  "tokenIn": "0x...",
+  "tokenOut": "0x...",
+  "amountIn": "100",
+  "decimalsIn": 6,
+  "decimalsOut": 6,
+  "slippage": "5.0",
+  "deadline": "30",
+  "userAddress": "0x...",
+  "authorization": {}
+}
+```
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `tokenIn` | `Address` | Yes | — | Input token address |
+| `tokenOut` | `Address` | Yes | — | Output token address |
+| `amountIn` | `string` | Yes | — | Amount to swap |
+| `userAddress` | `Address` | Yes | — | User's wallet address |
+| `decimalsIn` | `number` | No | `6` | Input token decimals |
+| `decimalsOut` | `number` | No | `6` | Output token decimals |
+| `slippage` | `string` | No | `"5.0"` | Slippage tolerance (%) |
+| `deadline` | `string` | No | `"30"` | TX deadline (minutes) |
+| `authorization` | `object` | No | — | EIP-7702 authorization |
+
+**Response:**
+```json
+{
+  "unsignedUserOp": { "..." },
+  "quote": {
+    "amountOut": "3412.580000",
+    "amountOutMinimum": "3242.951000"
+  }
+}
+```
+
+---
+
+#### `POST /api/aa/execute`
+
+Relays a signed UserOp to the blockchain. Rate limited to **5 req/min** per user.
+
+**Request Body:**
+```json
+{
+  "userOp": {
+    "sender": "0x...",
+    "nonce": "1",
+    "callData": "0x...",
+    "callGasLimit": "200000",
+    "verificationGasLimit": "100000",
+    "preVerificationGas": "50000",
+    "maxFeePerGas": "0",
+    "maxPriorityFeePerGas": "0",
+    "signature": "0xsigned..."
+  },
+  "authorization": {}
+}
+```
+
+**Response:**
+```json
+{ "txHash": "0xabc...123" }
+```
+
+---
+
+### Offline Execution (For Agents)
+
+#### `POST /api/aa/execute-offline`
+
+Executes transactions on behalf of users without their real-time signature. Intended for autonomous agents operating under a delegated policy.
+
+**Auth:** Requires `X-Internal-Key` header (not Bearer token).
+
+**Request Body:**
+```json
+{
+  "type": "borrow",
+  "userAddress": "0x...",
+  "params": {
+    "action": "supply",
+    "amount": "1.5"
+  }
+}
+```
+
+**Borrow params:**
+
+| Field | Type | Description |
+|---|---|---|
+| `action` | `string` | `"supply"` \| `"borrow"` \| `"repay"` \| `"withdraw"` |
+| `amount` | `string` | Amount in human-readable units |
+| `max` | `boolean` | Use maximum available amount |
+| `supplyAmount` | `string` | Supply amount (combined mode) |
+| `borrowAmount` | `string` | Borrow amount (combined mode) |
+| `repayAmount` | `string` | Repay amount (combined mode) |
+| `withdrawAmount` | `string` | Withdraw amount (combined mode) |
+| `repayMax` | `boolean` | Repay full debt |
+| `withdrawMax` | `boolean` | Withdraw all collateral |
+
+**Swap params:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `tokenIn` | `Address` | Yes | Input token address |
+| `tokenOut` | `Address` | Yes | Output token address |
+| `amountIn` | `string` | Yes | Amount to swap |
+| `decimalsIn` | `number` | No | Input token decimals |
+| `decimalsOut` | `number` | No | Output token decimals |
+| `slippage` | `string` | No | Slippage tolerance (%) |
+| `deadline` | `string` | No | TX deadline (minutes) |
+
+**Response:**
+```json
+{
+  "txHash": "0xabc...123",
+  "userOpHash": "0xdef...456"
+}
+```
+
+**Security:**
+- Validated against a backend policy (contract allowlist + selector allowlist)
+- Application-level spend limit of **1000 per transaction**
+- All executions are audit-logged to MongoDB
+- Input validated with Zod schema (`ExecuteOfflineSchema`)
+
+---
+
+### Auto-Rebalancing (Cron)
+
+#### `GET /api/cron/monitor-positions`
+
+Monitors all VaultX users' Morpho positions and triggers atomic rebalancing when LTV exceeds the safety threshold. Runs automatically every 5 minutes via Vercel Cron.
+
+**Auth:** Requires `Authorization: Bearer <CRON_SECRET>` (set automatically by Vercel).
+
+**Response:**
+```json
+{
+  "success": true,
+  "summary": {
+    "usersChecked": 5,
+    "rebalancesTriggered": 1,
+    "skipped": 2,
+    "errors": 0
+  },
+  "timestamp": "2026-02-08T18:00:00.000Z"
+}
+```
+
+**Rebalance logic:**
+- Triggers when `currentLTV > 60%` (market LLTV is 77%)
+- Withdraws 50% of safe withdrawable collateral (XAUT)
+- Swaps XAUT → USDT via Uniswap V3 (2% slippage)
+- Repays USDT debt to Morpho
+- All 5 calls execute atomically in one UserOp
+- 1-hour cooldown between rebalances per user
+- Results logged to `rebalance_log` and `transaction_history` collections
+
+---
+
+### Error Responses
+
+All endpoints return errors in a consistent format:
+
+```json
+{ "error": "Description of what went wrong" }
+```
+
+| Status | Meaning |
+|---|---|
+| `400` | Invalid request (missing/malformed fields) |
+| `401` | Unauthorized (missing or invalid auth token/key) |
+| `403` | Forbidden (address ownership mismatch or policy violation) |
+| `429` | Rate limited (includes `Retry-After` header) |
+| `500` | Server error |
+
+---
+
+## Contract Addresses (Arbitrum)
+
+| Contract | Address |
+|---|---|
+| Morpho Blue | `0x6c247b1F6182318877311737BaC0844bAa518F5e` |
+| Uniswap V3 Quoter | `0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6` |
+| Uniswap V3 SwapRouter | `0xE592427A0AEce92De3Edee1F18E0157C05861564` |
+| USDT0 | See `src/constants/addresses.ts` |
+| XAUt0 | See `src/constants/addresses.ts` |
 
 ---
 
