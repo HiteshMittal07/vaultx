@@ -30,7 +30,8 @@ export type TransactionType =
   | "supply"
   | "borrow"
   | "repay"
-  | "withdraw";
+  | "withdraw"
+  | "rebalance";
 
 export type TransactionStatus = "pending" | "success" | "failed";
 export type ExecutedBy = "user" | "vaultx-agent";
