@@ -6,17 +6,20 @@ if (!MONGODB_URI) {
   throw new Error("MONGODB_URI environment variable is not set");
 }
 
-let client: MongoClient;
-let db: Db;
+// Cache the client promise on globalThis so it survives Next.js HMR
+// and doesn't create new connections on every hot reload.
+const globalForMongo = globalThis as typeof globalThis & {
+  _mongoClientPromise?: Promise<MongoClient>;
+};
+
+if (!globalForMongo._mongoClientPromise) {
+  const client = new MongoClient(MONGODB_URI!);
+  globalForMongo._mongoClientPromise = client.connect();
+}
+
+const clientPromise = globalForMongo._mongoClientPromise;
 
 export async function getDb(): Promise<Db> {
-  if (db) return db;
-
-  if (!client) {
-    client = new MongoClient(MONGODB_URI!);
-    await client.connect();
-  }
-
-  db = client.db();
-  return db;
+  const client = await clientPromise;
+  return client.db();
 }
