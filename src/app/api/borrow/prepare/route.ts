@@ -11,7 +11,9 @@ import { getMorphoMarketParams, getMorphoUserPosition } from "@/lib/blockchain/u
 import { AAService, bigIntReplacer } from "@/services/account-abstraction";
 import { MorphoMarketParamsRaw } from "@/types";
 import { MARKET_ID } from "@/constants/addresses";
-import { verifyAuth } from "@/lib/auth";
+import { verifyAuth, verifyAddressOwnership } from "@/lib/auth";
+import { BorrowPrepareSchema, formatZodError } from "@/lib/validation";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * POST /api/borrow/prepare
@@ -40,7 +42,17 @@ export async function POST(request: NextRequest) {
     const auth = await verifyAuth(request);
     if (auth instanceof NextResponse) return auth;
 
+    const limited = rateLimit(`prepare:${auth.userId}`, 10);
+    if (limited) return limited;
+
     const body = await request.json();
+    const parsed = BorrowPrepareSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: formatZodError(parsed.error) },
+        { status: 400 }
+      );
+    }
 
     const {
       action,
@@ -48,22 +60,16 @@ export async function POST(request: NextRequest) {
       max,
       userAddress,
       authorization,
-      // Combined action fields
       supplyAmount,
       borrowAmount,
       repayAmount,
       withdrawAmount,
       repayMax,
       withdrawMax,
-    } = body;
+    } = parsed.data;
 
-    // Validate user address
-    if (!userAddress) {
-      return NextResponse.json(
-        { error: "Missing user address" },
-        { status: 400 }
-      );
-    }
+    const ownershipError = await verifyAddressOwnership(auth.userId, userAddress);
+    if (ownershipError) return ownershipError;
 
     // Fetch market params and user position
     const [marketParams, userPosition] = await Promise.all([

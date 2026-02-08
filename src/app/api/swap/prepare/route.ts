@@ -6,7 +6,9 @@ import {
   SwapParams,
 } from "@/services/api/swap.service";
 import { AAService, bigIntReplacer } from "@/services/account-abstraction";
-import { verifyAuth } from "@/lib/auth";
+import { verifyAuth, verifyAddressOwnership } from "@/lib/auth";
+import { SwapPrepareSchema, formatZodError } from "@/lib/validation";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * POST /api/swap/prepare
@@ -32,27 +34,32 @@ export async function POST(request: NextRequest) {
     const auth = await verifyAuth(request);
     if (auth instanceof NextResponse) return auth;
 
+    const limited = rateLimit(`prepare:${auth.userId}`, 10);
+    if (limited) return limited;
+
     const body = await request.json();
+    const parsed = SwapPrepareSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: formatZodError(parsed.error) },
+        { status: 400 }
+      );
+    }
 
     const {
       tokenIn,
       tokenOut,
       amountIn,
-      decimalsIn = 6,
-      decimalsOut = 6,
-      slippage = "5.0",
-      deadline = "30",
+      decimalsIn,
+      decimalsOut,
+      slippage,
+      deadline,
       userAddress,
       authorization,
-    } = body;
+    } = parsed.data;
 
-    // Validate required fields
-    if (!tokenIn || !tokenOut || !amountIn || !userAddress) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
-    }
+    const ownershipError = await verifyAddressOwnership(auth.userId, userAddress);
+    if (ownershipError) return ownershipError;
 
     const params: SwapParams = {
       tokenIn: tokenIn as Address,

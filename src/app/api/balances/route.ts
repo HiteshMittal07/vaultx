@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Address, formatUnits } from "viem";
 import { getTokenBalances } from "@/lib/blockchain/utils";
 import { USDT0, XAUT0 } from "@/constants/addresses";
-import { verifyAuth } from "@/lib/auth";
+import { verifyAuth, verifyAddressOwnership } from "@/lib/auth";
 
 /**
  * GET /api/balances?address=0x...
@@ -21,6 +21,9 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const ownershipError = await verifyAddressOwnership(auth.userId, address);
+    if (ownershipError) return ownershipError;
 
     const [usdtRaw, xautRaw] = await getTokenBalances(
       address as Address,

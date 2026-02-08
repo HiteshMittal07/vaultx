@@ -4,11 +4,15 @@ import {
   parseUserOpWithBigInt,
 } from "@/services/account-abstraction";
 import { verifyAuth } from "@/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
     const auth = await verifyAuth(req);
     if (auth instanceof NextResponse) return auth;
+
+    const limited = rateLimit(`execute:${auth.userId}`, 5);
+    if (limited) return limited;
 
     const { userOp, authorization } = await req.json();
 

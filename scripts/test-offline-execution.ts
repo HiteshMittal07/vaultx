@@ -19,7 +19,8 @@
 import "dotenv/config";
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const USER_ADDRESS = "0x420C599598C04CD13a85cB9d3ED86667e734e74F";
+const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || "";
+const USER_ADDRESS = "0x4D324ACFB77b68dA846Dd805F9fAdfd8cc3617bC";
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -30,7 +31,10 @@ async function callEndpoint(path: string, body: object) {
 
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Internal-Key": INTERNAL_API_KEY,
+    },
     body: JSON.stringify(body),
   });
 
@@ -55,7 +59,10 @@ async function testMissingFields() {
 
   const { status, data } = await callEndpoint("/api/aa/execute-offline", {});
   assert(status === 400, "Returns 400 for empty body");
-  assert(data.error === "Missing type or userAddress", "Error message matches");
+  assert(
+    data.error === "type: Invalid discriminator value. Expected 'borrow' | 'swap'",
+    "Error message matches",
+  );
 }
 
 async function testInvalidType() {
@@ -67,7 +74,11 @@ async function testInvalidType() {
     params: {},
   });
   assert(status === 400, "Returns 400 for invalid type");
-  assert(data.error === "Invalid type", "Error message matches");
+  assert(
+    data.error ===
+      "type: Invalid discriminator value. Expected 'borrow' | 'swap'",
+    "Error message matches",
+  );
 }
 
 async function testMissingBorrowParams() {

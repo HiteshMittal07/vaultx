@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { verifyAuth } from "@/lib/auth";
+import { verifyAuth, verifyAddressOwnership } from "@/lib/auth";
 
 const COLLECTION = "transaction_history";
 
@@ -20,6 +20,9 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const ownershipError = await verifyAddressOwnership(auth.userId, walletAddress);
+    if (ownershipError) return ownershipError;
 
     const db = await getDb();
     const history = await db

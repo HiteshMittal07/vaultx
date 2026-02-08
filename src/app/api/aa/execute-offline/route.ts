@@ -21,6 +21,9 @@ import { MorphoMarketParamsRaw } from "@/types";
 import { MARKET_ID } from "@/constants/addresses";
 import { getDb } from "@/lib/mongodb";
 import { validateCallsAgainstPolicy } from "@/services/api/policy.service";
+import { verifyInternalKey } from "@/lib/auth";
+import { ExecuteOfflineSchema, formatZodError } from "@/lib/validation";
+import { audit } from "@/lib/audit";
 
 /** Maximum allowed amount per offline transaction (application-level limit). */
 const MAX_AMOUNT_PER_TX = 1000;
@@ -42,16 +45,25 @@ const MAX_AMOUNT_PER_TX = 1000;
  * { txHash, userOpHash } OR { error }
  */
 export async function POST(request: NextRequest) {
+  // Internal-only endpoint — require API key
+  const authError = verifyInternalKey(request);
+  if (authError) {
+    audit({ event: "auth_failure", details: { endpoint: "/api/aa/execute-offline" } });
+    return authError;
+  }
+
   try {
     const body = await request.json();
-    const { type, userAddress, params } = body;
 
-    if (!type || !userAddress) {
+    const parsed = ExecuteOfflineSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Missing type or userAddress" },
+        { error: formatZodError(parsed.error) },
         { status: 400 }
       );
     }
+
+    const { type, userAddress, params } = parsed.data;
 
     let calls;
 
@@ -73,7 +85,7 @@ export async function POST(request: NextRequest) {
     // Validate calls against backend policy (contract allowlist, selectors, values)
     const policyCheck = validateCallsAgainstPolicy(calls);
     if (!policyCheck.valid) {
-      console.error("[API] Policy violation:", policyCheck.error);
+      audit({ event: "policy_violation", userAddress, action: type, details: { error: policyCheck.error } });
       return NextResponse.json(
         { error: `Policy violation: ${policyCheck.error}` },
         { status: 403 }
@@ -124,11 +136,13 @@ export async function POST(request: NextRequest) {
       console.error("[API] Failed to save offline history:", historyError);
     }
 
+    audit({ event: "offline_execution", userAddress, action: type, details: { txHash } });
+
     return NextResponse.json({ txHash, userOpHash });
   } catch (error: unknown) {
-    console.error("[API] Offline execution error:", error);
     const message =
       error instanceof Error ? error.message : "Offline execution failed";
+    audit({ event: "offline_execution_failed", details: { error: message } });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

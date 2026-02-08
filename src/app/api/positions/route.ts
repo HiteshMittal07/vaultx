@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Address } from "viem";
 import { getMorphoMarketData, getOraclePrice } from "@/lib/blockchain/utils";
-import { verifyAuth } from "@/lib/auth";
+import { verifyAuth, verifyAddressOwnership } from "@/lib/auth";
 import {
   parseUserPosition,
   parseLLTV,
@@ -25,6 +25,9 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const ownershipError = await verifyAddressOwnership(auth.userId, address);
+    if (ownershipError) return ownershipError;
 
     const { params, state, position } = await getMorphoMarketData(
       address as Address
