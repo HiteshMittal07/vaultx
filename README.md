@@ -110,7 +110,7 @@ Agent → /api/aa/execute-offline (with X-Internal-Key)
 
 **Auto-Rebalancing (cron-driven):**
 ```
-Vercel Cron (every 5 min) → GET /api/cron/monitor-positions
+GitHub Actions (every 10 min) → GET /api/cron/monitor-positions
   → Discover users from transaction_history
   → For each user with active position:
       1. Fetch position health from Morpho (on-chain)
@@ -156,7 +156,7 @@ cp .env.example .env
 | `AUTHORIZATION_PRIVATE_KEY` | ECDSA private key (PEM format) for signing EIP-7702 authorizations | Yes |
 | `MONGODB_URI` | MongoDB connection string (`mongodb+srv://...`) | Yes |
 | `INTERNAL_API_KEY` | API key for internal-only endpoints (offline execution) | Yes |
-| `CRON_SECRET` | Secret for Vercel Cron job authentication (`openssl rand -base64 32`) | Yes |
+| `CRON_SECRET` | Secret for cron endpoint auth (`openssl rand -base64 32`). Add to GitHub Secrets. | Yes |
 
 ### Run
 
@@ -573,7 +573,7 @@ Executes transactions on behalf of users without their real-time signature. Inte
 
 #### `GET /api/cron/monitor-positions`
 
-Monitors all VaultX users' Morpho positions and triggers atomic rebalancing when LTV exceeds the safety threshold. Runs automatically every 5 minutes via Vercel Cron.
+Monitors all VaultX users' Morpho positions and triggers atomic rebalancing when LTV exceeds the safety threshold. Runs every 10 minutes via GitHub Actions.
 
 **Auth:** Requires `Authorization: Bearer <CRON_SECRET>` (set automatically by Vercel).
 

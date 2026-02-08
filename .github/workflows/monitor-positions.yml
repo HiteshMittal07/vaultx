@@ -1,0 +1,21 @@
+name: Monitor Positions
+
+on:
+  schedule:
+    - cron: "*/10 * * * *" # Every 10 minutes
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger position monitor
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/monitor-positions")
+          echo "Response status: $response"
+          if [ "$response" -ne 200 ]; then
+            echo "Monitor endpoint returned $response"
+            exit 1
+          fi
