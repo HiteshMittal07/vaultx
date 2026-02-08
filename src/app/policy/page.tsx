@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useSigners } from "@privy-io/react-auth";
 import { motion } from "framer-motion";
@@ -83,15 +83,19 @@ const SECURITY_GUARANTEES = [
   },
 ];
 
-export default function PolicyPage() {
+function PolicyPageInner() {
   const { ready, authenticated } = usePrivy();
   const { wallets } = useWallets();
   const { addSigners } = useSigners();
   const { isDelegated, isLoading } = useDelegationStatus();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isManageMode = searchParams.get("manage") === "true";
 
   const [isApproving, setIsApproving] = useState(false);
+  const [isRevoking, setIsRevoking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { removeSigners } = useSigners();
 
   // Redirect unauthenticated users
   useEffect(() => {
@@ -100,12 +104,13 @@ export default function PolicyPage() {
     }
   }, [ready, authenticated, router]);
 
-  // Already delegated — send straight to dashboard
+  // Auto-redirect delegated users to dashboard unless they
+  // navigated here intentionally via navbar (?manage=true)
   useEffect(() => {
-    if (!isLoading && isDelegated) {
+    if (!isLoading && isDelegated && !isManageMode) {
       router.push("/dashboard");
     }
-  }, [isLoading, isDelegated, router]);
+  }, [isLoading, isDelegated, isManageMode, router]);
 
   const handleApprove = async () => {
     const embeddedWallet = wallets.find(
@@ -138,12 +143,31 @@ export default function PolicyPage() {
     }
   };
 
+  const handleRevoke = async () => {
+    const embeddedWallet = wallets.find(
+      (w) => w.walletClientType === "privy"
+    );
+    if (!embeddedWallet) {
+      setError("No embedded wallet found. Please refresh and try again.");
+      return;
+    }
+
+    setIsRevoking(true);
+    setError(null);
+
+    try {
+      await removeSigners({ address: embeddedWallet.address });
+      router.push("/dashboard");
+    } catch (err) {
+      console.error("[PolicyPage] Failed to revoke signer:", err);
+      setError("Failed to revoke agent access. Please try again.");
+    } finally {
+      setIsRevoking(false);
+    }
+  };
+
   if (!ready || !authenticated || isLoading) {
     return null;
-  }
-
-  if (isDelegated) {
-    return null; // will redirect via useEffect
   }
 
   return (
@@ -284,20 +308,55 @@ export default function PolicyPage() {
 
           {/* Actions */}
           <div className="flex flex-col items-center gap-3">
-            <button
-              onClick={handleApprove}
-              disabled={isApproving}
-              className="w-full max-w-md rounded-xl bg-emerald-500 px-8 py-3.5 text-base font-semibold text-white transition-all hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30"
-            >
-              {isApproving ? "Approving..." : "Approve & Continue"}
-            </button>
-            <p className="text-xs text-zinc-500 max-w-md text-center">
-              By approving, you authorize VaultX to sign and execute
-              transactions on your behalf. You can revoke access at any time.
-            </p>
+            {isDelegated ? (
+              <>
+                <div className="mb-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400 text-center w-full max-w-md">
+                  VaultX Agent is currently authorized on your wallet.
+                </div>
+                <button
+                  onClick={() => router.push("/dashboard")}
+                  className="w-full max-w-md rounded-xl bg-emerald-500 px-8 py-3.5 text-base font-semibold text-white transition-all hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30"
+                >
+                  Go to Dashboard
+                </button>
+                <button
+                  onClick={handleRevoke}
+                  disabled={isRevoking}
+                  className="w-full max-w-md rounded-xl border border-red-500/30 bg-red-500/10 px-8 py-3.5 text-base font-semibold text-red-400 transition-all hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isRevoking ? "Revoking..." : "Revoke Agent Access"}
+                </button>
+                <p className="text-xs text-zinc-500 max-w-md text-center">
+                  Revoking will prevent VaultX from executing any transactions
+                  on your behalf until you re-approve.
+                </p>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={handleApprove}
+                  disabled={isApproving}
+                  className="w-full max-w-md rounded-xl bg-emerald-500 px-8 py-3.5 text-base font-semibold text-white transition-all hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30"
+                >
+                  {isApproving ? "Approving..." : "Approve & Continue"}
+                </button>
+                <p className="text-xs text-zinc-500 max-w-md text-center">
+                  By approving, you authorize VaultX to sign and execute
+                  transactions on your behalf. You can revoke access at any time.
+                </p>
+              </>
+            )}
           </div>
         </motion.div>
       </main>
     </div>
+  );
+}
+
+export default function PolicyPage() {
+  return (
+    <Suspense>
+      <PolicyPageInner />
+    </Suspense>
   );
 }

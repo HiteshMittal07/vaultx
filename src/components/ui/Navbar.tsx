@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { Copy, Check, LogOut, Menu, X } from "lucide-react";
+import { Copy, Check, LogOut, Menu, X, ShieldCheck, Shield } from "lucide-react";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useDelegationStatus } from "@/hooks/useDelegationStatus";
 
 const publicLinks = [
   { name: "Market", href: "#" },
@@ -28,6 +29,7 @@ export function Navbar() {
   const [copied, setCopied] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  const { isDelegated } = useDelegationStatus();
   const isAuth = ready && authenticated;
   // Fallback to first wallet if privy type not found
   const wallet =
@@ -129,6 +131,24 @@ export function Navbar() {
                 </div>
               )}
 
+              {/* Agent Policy */}
+              <Link
+                href="/policy?manage=true"
+                className={cn(
+                  "hidden md:flex items-center justify-center h-9 w-9 rounded-full transition-colors hover:bg-white/10",
+                  isDelegated
+                    ? "text-emerald-400 hover:text-emerald-300"
+                    : "text-zinc-400 hover:text-yellow-400"
+                )}
+                title={isDelegated ? "Agent authorized — Manage policy" : "Agent not authorized — Set up policy"}
+              >
+                {isDelegated ? (
+                  <ShieldCheck className="h-4 w-4" />
+                ) : (
+                  <Shield className="h-4 w-4" />
+                )}
+              </Link>
+
               {/* Mobile Menu Button */}
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -179,6 +199,23 @@ export function Navbar() {
                     </Link>
                   );
                 })}
+                <Link
+                  href="/policy?manage=true"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-colors",
+                    isDelegated
+                      ? "text-emerald-400 hover:bg-emerald-500/10"
+                      : "text-yellow-400 hover:bg-yellow-500/10"
+                  )}
+                >
+                  {isDelegated ? (
+                    <ShieldCheck className="h-4 w-4" />
+                  ) : (
+                    <Shield className="h-4 w-4" />
+                  )}
+                  Agent Policy
+                </Link>
                 <button
                   onClick={logout}
                   className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-400/10 transition-colors mt-2 border-t border-white/5 pt-4"
