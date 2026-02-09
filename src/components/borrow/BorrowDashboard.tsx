@@ -119,8 +119,8 @@ export function BorrowDashboard() {
 
   // Balances for sidebar
   const sidebarBalances = {
-    loan: balances?.usdt0.formatted ?? "0",
-    collateral: balances?.xaut0.formatted ?? "0",
+    loan: balances?.usdt.formatted ?? "0",
+    collateral: balances?.xaut.formatted ?? "0",
   };
 
   // Transaction execution via backend
@@ -209,14 +209,14 @@ export function BorrowDashboard() {
         <div className="flex items-center gap-4">
           <div className="flex -space-x-2">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white z-10 border-4 border-[#050505] overflow-hidden">
-              <Image src={LOGOS.USDT0} alt="USDT0" width={48} height={48} />
+              <Image src={LOGOS.USDT} alt="USDT" width={48} height={48} />
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white z-0 border-4 border-[#050505] overflow-hidden">
-              <Image src={LOGOS.XAUt0} alt="XAUt0" width={48} height={48} />
+              <Image src={LOGOS.XAUt} alt="XAUt" width={48} height={48} />
             </div>
           </div>
           <h1 className="text-2xl sm:text-4xl font-light text-white">
-            XAUt0 <span className="text-zinc-500">/</span> USDT0
+            XAUt <span className="text-zinc-500">/</span> USDT
           </h1>
           <button
             onClick={handleCopyMarketId}
@@ -233,23 +233,23 @@ export function BorrowDashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8">
           <MetricStat
             label="Total Market Size"
-            value={`$${(totalMarketSize * (pythPrices.USDT0 || 1)).toFixed(2)}`}
-            subValue={`${totalMarketSize.toFixed(2)} USDT0`}
+            value={`$${(totalMarketSize * (pythPrices.USDT || 1)).toFixed(2)}`}
+            subValue={`${totalMarketSize.toFixed(2)} USDT`}
             isLoading={marketLoading}
             info="The total value of all assets deposited as collateral in this specific market."
           />
           <MetricStat
             label="Available Liquidity"
-            value={`$${(totalLiquidity * (pythPrices.USDT0 || 1)).toFixed(2)}`}
-            subValue={`${totalLiquidity.toFixed(2)} USDT0`}
+            value={`$${(totalLiquidity * (pythPrices.USDT || 1)).toFixed(2)}`}
+            subValue={`${totalLiquidity.toFixed(2)} USDT`}
             isLoading={marketLoading}
-            info="The amount of USDT0 currently available in the pool for borrowing."
+            info="The amount of USDT currently available in the pool for borrowing."
           />
           <MetricStat
             label="APR"
             value={`${borrowRate}%`}
             isLoading={marketLoading}
-            info="The current annualized percentage rate for borrowing USDT0. This rate is variable and based on market utilization."
+            info="The current annualized percentage rate for borrowing USDT. This rate is variable and based on market utilization."
           />
         </div>
 

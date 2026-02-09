@@ -97,11 +97,11 @@ export function ActionButton({
       if (Number(supplyAmount || 0) > 0 && Number(borrowAmount || 0) > 0)
         return "Supply & Borrow";
       if (Number(supplyAmount || 0) > 0) return "Supply Collateral";
-      return "Borrow USDT0";
+      return "Borrow USDT";
     }
 
     // Repay mode
-    if (isRepayInsufficient) return "Insufficient USDT0";
+    if (isRepayInsufficient) return "Insufficient USDT";
     if (isRepayExcessive) return "Inconsistent Amount";
     if (isWithdrawExcessive) return "Insufficient Collateral";
     if (projectedLTV >= lltv && userBorrow > 0) return "LTV Limit (Repay or Add more)";

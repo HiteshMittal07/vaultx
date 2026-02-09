@@ -4,7 +4,7 @@ import { Address } from "viem";
 // Token Types
 // =============================================================================
 
-export type TokenSymbol = "USDT0" | "XAUt0";
+export type TokenSymbol = "USDT" | "XAUt";
 
 export interface TokenInfo {
   symbol: TokenSymbol;
@@ -17,8 +17,8 @@ export interface TokenInfo {
 // =============================================================================
 
 export interface PythPrices {
-  XAUt0: number;
-  USDT0: number;
+  XAUt: number;
+  USDT: number;
 }
 
 // =============================================================================
@@ -31,7 +31,8 @@ export type TransactionType =
   | "borrow"
   | "repay"
   | "withdraw"
-  | "rebalance";
+  | "rebalance"
+  | "migration";
 
 export type TransactionStatus = "pending" | "success" | "failed";
 export type ExecutedBy = "user" | "vaultx-agent";
@@ -321,3 +322,37 @@ export interface BorrowPolicy {
 }
 
 export type ExecutionPolicy = SwapPolicy | BorrowPolicy;
+
+// =============================================================================
+// Multi-Protocol Types
+// =============================================================================
+
+export type ProtocolId = "morpho" | "fluid";
+
+export interface ProtocolMarket {
+  protocol: ProtocolId;
+  name: string;
+  contractAddress: Address;
+  collateralToken: TokenSymbol;
+  debtToken: TokenSymbol;
+  ltv: number;
+  liquidationThreshold: number;
+  liquidationPenalty: number;
+  borrowRate: string;
+  /** Protocol-specific identifier (Morpho marketId, Fluid vaultId, etc.) */
+  marketId?: string;
+}
+
+export interface ProtocolPosition {
+  protocol: ProtocolId;
+  marketId?: string;
+  collateral: number;
+  debt: number;
+  ltv: number;
+  healthFactor?: number;
+}
+
+export interface ProtocolsOverview {
+  markets: ProtocolMarket[];
+  positions: ProtocolPosition[];
+}

@@ -3,14 +3,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/react-auth";
 import { TransactionHistoryItem, TransactionType, ExecutedBy } from "@/types";
-import { USDT0, XAUT0 } from "@/constants/addresses";
+import { USDT, XAUT } from "@/constants/addresses";
 
 /** Map known token addresses to symbols for display. */
 function resolveTokenSymbol(address?: string): string | undefined {
   if (!address) return undefined;
   const lower = address.toLowerCase();
-  if (lower === USDT0.toLowerCase()) return "USDT0";
-  if (lower === XAUT0.toLowerCase()) return "XAUt0";
+  if (lower === USDT.toLowerCase()) return "USDT";
+  if (lower === XAUT.toLowerCase()) return "XAUt";
   return address;
 }
 

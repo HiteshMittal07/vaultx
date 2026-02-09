@@ -15,8 +15,8 @@ interface TokenBalance {
 }
 
 interface UseTokenBalancesResult {
-  usdt0: TokenBalance;
-  xaut0: TokenBalance;
+  usdt: TokenBalance;
+  xaut: TokenBalance;
 }
 
 interface UseTokenBalanceOptions {
@@ -53,15 +53,15 @@ export function useTokenBalances(
       const data = await res.json();
 
       return {
-        usdt0: {
-          raw: BigInt(data.usdt0.raw),
-          formatted: data.usdt0.formatted,
-          decimals: data.usdt0.decimals,
+        usdt: {
+          raw: BigInt(data.usdt.raw),
+          formatted: data.usdt.formatted,
+          decimals: data.usdt.decimals,
         },
-        xaut0: {
-          raw: BigInt(data.xaut0.raw),
-          formatted: data.xaut0.formatted,
-          decimals: data.xaut0.decimals,
+        xaut: {
+          raw: BigInt(data.xaut.raw),
+          formatted: data.xaut.formatted,
+          decimals: data.xaut.decimals,
         },
       };
     },
@@ -118,7 +118,7 @@ export function formatBalanceDisplay(
   }
 
   // Format based on symbol type
-  if (symbol === "XAUt0") {
+  if (symbol === "XAUt") {
     return `${value.toFixed(maximumFractionDigits)} ${symbol}`;
   }
 

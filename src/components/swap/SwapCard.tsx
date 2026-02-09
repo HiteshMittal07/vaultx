@@ -12,7 +12,7 @@ import {
   useSignMessage,
   useWallets,
 } from "@privy-io/react-auth";
-import { USDT0, XAUT0 } from "@/constants/addresses";
+import { USDT, XAUT } from "@/constants/addresses";
 import { TokenInfo } from "@/types";
 import {
   usePrices,
@@ -30,15 +30,15 @@ import { SwapButton } from "./SwapButton";
 import { useSwapQuote } from "./hooks/useSwapQuote";
 import { InlineNotificationToast } from "@/components/ui/NotificationToast";
 
-const TOKEN_USDT0: TokenInfo = {
-  symbol: "USDT0",
-  address: USDT0,
+const TOKEN_USDT: TokenInfo = {
+  symbol: "USDT",
+  address: USDT,
   decimals: 6,
 };
 
-const TOKEN_XAUT0: TokenInfo = {
-  symbol: "XAUt0",
-  address: XAUT0,
+const TOKEN_XAUT: TokenInfo = {
+  symbol: "XAUt",
+  address: XAUT,
   decimals: 6,
 };
 
@@ -49,8 +49,8 @@ export function SwapCard() {
   const address = wallet?.address;
 
   // Token state
-  const [tokenIn, setTokenIn] = useState<TokenInfo>(TOKEN_USDT0);
-  const [tokenOut, setTokenOut] = useState<TokenInfo>(TOKEN_XAUT0);
+  const [tokenIn, setTokenIn] = useState<TokenInfo>(TOKEN_USDT);
+  const [tokenOut, setTokenOut] = useState<TokenInfo>(TOKEN_XAUT);
 
   // Amount state
   const [sellAmount, setSellAmount] = useState("");
@@ -77,7 +77,7 @@ export function SwapCard() {
   const getBalance = useCallback(
     (token: TokenInfo) => {
       if (!balances) return { raw: BigInt(0), formatted: "0.00" };
-      return token.symbol === "USDT0" ? balances.usdt0 : balances.xaut0;
+      return token.symbol === "USDT" ? balances.usdt : balances.xaut;
     },
     [balances]
   );
@@ -89,7 +89,7 @@ export function SwapCard() {
   const formatBalanceDisplay = useCallback(
     (token: TokenInfo, balance: { raw: bigint; formatted: string }) => {
       const value = Number(balance.formatted);
-      if (token.symbol === "XAUt0") {
+      if (token.symbol === "XAUt") {
         return value < 0.0001 && value > 0
           ? "< 0.0001"
           : value.toFixed(4);

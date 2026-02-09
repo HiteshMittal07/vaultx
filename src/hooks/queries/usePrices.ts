@@ -29,9 +29,9 @@ export function usePrices(options?: { enabled?: boolean }) {
   });
 
   const prices: PythPrices = useMemo(() => ({
-    XAUt0: query.data?.XAUt0 ?? 0,
-    USDT0: query.data?.USDT0 ?? 1,
-  }), [query.data?.XAUt0, query.data?.USDT0]);
+    XAUt: query.data?.XAUt ?? 0,
+    USDT: query.data?.USDT ?? 1,
+  }), [query.data?.XAUt, query.data?.USDT]);
 
   const getUsdValue = useCallback(
     (amount: number, token: keyof PythPrices): number => {

@@ -40,7 +40,7 @@ export function Dashboard() {
     refetch: refetchBalances,
   } = useTokenBalances(address as Address | undefined);
 
-  const balance = balances?.usdt0.formatted ?? "0";
+  const balance = balances?.usdt.formatted ?? "0";
 
   const handleRefresh = () => {
     refetchPosition();
@@ -106,15 +106,16 @@ export function Dashboard() {
               <div className="flex items-baseline flex-wrap gap-2">
                 <span className="text-3xl sm:text-5xl font-bold text-white">
                   $
-                  {(
-                    Number(balance) * pythPrices.USDT0
-                  ).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  {(Number(balance) * pythPrices.USDT).toLocaleString(
+                    undefined,
+                    {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    },
+                  )}
                 </span>
               </div>
-              <p className="text-xs text-zinc-500 mt-2">USDT0 Balance</p>
+              <p className="text-xs text-zinc-500 mt-2">USDT Balance</p>
             </div>
           </motion.div>
 
@@ -139,7 +140,7 @@ export function Dashboard() {
                       Swap Tokens
                     </h3>
                     <p className="text-sm text-zinc-400">
-                      Instant decentralized token swaps. Trade XAUt0/USDT.
+                      Instant decentralized token swaps. Trade XAUt/USDT.
                     </p>
                   </div>
                 </div>
@@ -220,7 +221,7 @@ export function Dashboard() {
                   <div className="flex items-center gap-2">
                     <div className="h-8 w-8 rounded-full overflow-hidden bg-white">
                       <Image
-                        src={LOGOS.USDT0}
+                        src={LOGOS.USDT}
                         alt="USDT"
                         width={32}
                         height={32}
@@ -228,7 +229,7 @@ export function Dashboard() {
                     </div>
                     <div>
                       <h4 className="text-sm font-medium text-white">
-                        XAUt0 / USDT0 Market
+                        XAUt / USDT Market
                       </h4>
                       <p className="text-[10px] text-zinc-500 uppercase tracking-widest">
                         Morpho Blue Position
@@ -250,10 +251,10 @@ export function Dashboard() {
                       {positionData.collateral < 0.0001
                         ? "< 0.0001"
                         : positionData.collateral.toFixed(4)}{" "}
-                      XAUt0
+                      XAUt
                     </p>
                     <p className="text-xs text-zinc-500">
-                      ${(positionData.collateral * pythPrices.XAUt0).toFixed(2)}
+                      ${(positionData.collateral * pythPrices.XAUt).toFixed(2)}
                     </p>
                   </div>
                   <div>
@@ -288,8 +289,8 @@ export function Dashboard() {
                 No active positions
               </h3>
               <p className="text-zinc-400 max-w-sm mb-6">
-                You don&apos;t have any active positions yet. Start by depositing
-                funds or taking a loan.
+                You don&apos;t have any active positions yet. Start by
+                depositing funds or taking a loan.
               </p>
               <Link
                 href="/borrow"
@@ -329,7 +330,9 @@ export function Dashboard() {
                             ) : (
                               <User className="h-3 w-3" />
                             )}
-                            {tx.executedBy === "vaultx-agent" ? "VaultX Agent" : "You"}
+                            {tx.executedBy === "vaultx-agent"
+                              ? "VaultX Agent"
+                              : "You"}
                           </span>
                         </div>
                         <p className="text-[10px] text-zinc-500 font-mono">
@@ -338,12 +341,12 @@ export function Dashboard() {
                       </div>
                     </div>
                     <a
-                      href={`https://arbiscan.io/tx/${tx.id}`}
+                      href={`https://etherscan.io/tx/${tx.id}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-[10px] font-bold text-zinc-500 hover:text-emerald-400 uppercase tracking-widest flex items-center gap-1"
                     >
-                      Arbiscan
+                      Etherscan
                       <ArrowRight className="h-3 w-3 -rotate-45" />
                     </a>
                   </div>

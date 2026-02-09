@@ -46,7 +46,9 @@ export function ActivityTab({ history }: ActivityTabProps) {
                         ) : (
                           <User className="h-3 w-3" />
                         )}
-                        {tx.executedBy === "vaultx-agent" ? "VaultX Agent" : "You"}
+                        {tx.executedBy === "vaultx-agent"
+                          ? "VaultX Agent"
+                          : "You"}
                       </span>
                     </div>
                     <p className="text-zinc-500 text-xs">{tx.timestamp}</p>
@@ -54,12 +56,12 @@ export function ActivityTab({ history }: ActivityTabProps) {
                 </div>
                 <div className="text-right">
                   <a
-                    href={`https://arbiscan.io/tx/${tx.id}`}
+                    href={`https://etherscan.io/tx/${tx.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-emerald-400 text-xs hover:underline flex items-center gap-1"
                   >
-                    View on Arbiscan <ExternalLink className="h-3 w-3" />
+                    View on Etherscan <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
               </div>

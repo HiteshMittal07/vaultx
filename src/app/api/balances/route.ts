@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Address, formatUnits } from "viem";
 import { getTokenBalances } from "@/lib/blockchain/utils";
-import { USDT0, XAUT0 } from "@/constants/addresses";
+import { USDT, XAUT } from "@/constants/addresses";
 import { verifyAuth, verifyAddressOwnership } from "@/lib/auth";
 
 /**
  * GET /api/balances?address=0x...
- * Returns formatted token balances for USDT0 and XAUt0.
+ * Returns formatted token balances for USDT and XAUt.
  * Requires auth.
  */
 export async function GET(request: NextRequest) {
@@ -27,16 +27,16 @@ export async function GET(request: NextRequest) {
 
     const [usdtRaw, xautRaw] = await getTokenBalances(
       address as Address,
-      [USDT0, XAUT0]
+      [USDT, XAUT]
     );
 
     return NextResponse.json({
-      usdt0: {
+      usdt: {
         raw: usdtRaw.toString(),
         formatted: formatUnits(usdtRaw, 6),
         decimals: 6,
       },
-      xaut0: {
+      xaut: {
         raw: xautRaw.toString(),
         formatted: formatUnits(xautRaw, 6),
         decimals: 6,

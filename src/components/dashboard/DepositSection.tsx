@@ -34,7 +34,7 @@ export function DepositSection({ address }: DepositSectionProps) {
     checkSmartAccount();
   }, [address]);
 
-  const network = { name: "Arbitrum One", color: "bg-blue-500" };
+  const network = { name: "Ethereum Mainnet", color: "bg-blue-500" };
 
   const handleCopy = () => {
     if (address) {
@@ -60,11 +60,11 @@ export function DepositSection({ address }: DepositSectionProps) {
             <div className="flex items-center gap-2 mb-2">
               <div className="h-8 w-8 rounded-lg bg-white/5 flex items-center justify-center p-1.5 overflow-hidden">
                 <Image
-                  src="/arb-logo.svg"
-                  alt="Arbitrum"
-                  width={20}
-                  height={20}
-                  className="w-full h-full"
+                  src="/eth-logo.svg"
+                  alt="Ethereum"
+                  width={25}
+                  height={25}
+                  className="w-full h-full bg-white rounded-md"
                 />
               </div>
               <h3 className="text-lg font-bold text-white">Deposit</h3>
@@ -88,7 +88,7 @@ export function DepositSection({ address }: DepositSectionProps) {
               <div className="flex items-center gap-3">
                 <div className="h-9 w-9 rounded-full bg-white flex items-center justify-center overflow-hidden shadow-[0_0_15px_rgba(255,255,255,0.1)]">
                   <Image
-                    src={LOGOS.USDT0}
+                    src={LOGOS.USDT}
                     alt="USDT"
                     width={36}
                     height={36}
@@ -109,9 +109,15 @@ export function DepositSection({ address }: DepositSectionProps) {
                   On Network
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/5 border border-white/10">
-                  <Image src="/arb-logo.svg" alt="Arb" width={12} height={12} />
+                  <Image
+                    src="/eth-logo.svg"
+                    alt="Arb"
+                    width={12}
+                    height={12}
+                    className="bg-white rounded-md"
+                  />
                   <span className="text-[10px] font-bold text-zinc-300">
-                    Arbitrum
+                    Ethereum
                   </span>
                 </div>
               </div>
@@ -173,7 +179,7 @@ export function DepositSection({ address }: DepositSectionProps) {
               <Info className="h-3.5 w-3.5 text-orange-400/80 mt-0.5 shrink-0" />
               <p className="text-[10px] text-orange-400/70 leading-relaxed font-medium">
                 Send only <strong className="text-orange-300">USDT</strong> via{" "}
-                <strong className="text-orange-300">Arbitrum One</strong>.
+                <strong className="text-orange-300">Ethereum Mainnet</strong>.
               </p>
             </div>
           </div>

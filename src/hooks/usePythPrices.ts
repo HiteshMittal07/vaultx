@@ -6,8 +6,8 @@ import { getLatestPythPrice } from "@/lib/blockchain/utils";
 import { APP_CONFIG } from "@/constants/config";
 
 const DEFAULT_PRICES: PythPrices = {
-  XAUt0: 0,
-  USDT0: 1,
+  XAUt: 0,
+  USDT: 1,
 };
 
 const DEFAULT_REFRESH_INTERVAL = 30000; // 30 seconds
@@ -41,14 +41,14 @@ export function usePythPrices(options: UsePythPricesOptions = {}) {
 
     try {
       const [pXAUT, pUSDT] = await Promise.all([
-        getLatestPythPrice(APP_CONFIG.pythPriceFeedIds.XAUt0),
-        getLatestPythPrice(APP_CONFIG.pythPriceFeedIds.USDT0),
+        getLatestPythPrice(APP_CONFIG.pythPriceFeedIds.XAUt),
+        getLatestPythPrice(APP_CONFIG.pythPriceFeedIds.USDT),
       ]);
 
       if (!isMounted.current) return;
 
       if (pXAUT > 0 && pUSDT > 0) {
-        setPrices({ XAUt0: pXAUT, USDT0: pUSDT });
+        setPrices({ XAUt: pXAUT, USDT: pUSDT });
         setLastUpdated(new Date());
       }
     } catch (err) {

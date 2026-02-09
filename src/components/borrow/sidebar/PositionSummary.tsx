@@ -36,13 +36,13 @@ export function PositionSummary({
       <div className="flex justify-between text-sm items-center">
         <div className="flex items-center gap-2 text-zinc-400">
           <div className="flex h-4 w-4 items-center justify-center rounded-full bg-white overflow-hidden p-0.5">
-            <Image src={LOGOS.XAUt0} alt="XAUt0" width={12} height={12} />
+            <Image src={LOGOS.XAUt} alt="XAUt" width={12} height={12} />
           </div>
-          <span className="text-xs">Collateral (XAUt0)</span>
+          <span className="text-xs">Collateral (XAUt)</span>
         </div>
         <span className="text-white text-xs font-medium">
           {projectedCollateral < 0.0001 ? "< 0.0001" : projectedCollateral.toFixed(4)}{" "}
-          XAUt0
+          XAUt
         </span>
       </div>
 
@@ -50,12 +50,12 @@ export function PositionSummary({
       <div className="flex justify-between text-sm items-center">
         <div className="flex items-center gap-2 text-zinc-400">
           <div className="flex h-4 w-4 items-center justify-center rounded-full bg-white overflow-hidden p-0.5">
-            <Image src={LOGOS.USDT0} alt="USDT" width={12} height={12} />
+            <Image src={LOGOS.USDT} alt="USDT" width={12} height={12} />
           </div>
-          <span className="text-xs">Loan (USDT0)</span>
+          <span className="text-xs">Loan (USDT)</span>
         </div>
         <span className="text-white text-xs font-medium">
-          {projectedBorrow.toFixed(2)} USDT0
+          {projectedBorrow.toFixed(2)} USDT
         </span>
       </div>
 

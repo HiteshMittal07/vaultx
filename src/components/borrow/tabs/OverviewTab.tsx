@@ -8,7 +8,7 @@ import {
 import { MarketAttribute } from "../components/MarketAttribute";
 import { RiskCard } from "../components/RiskCard";
 import { LOGOS } from "@/constants/config";
-import { USDT0, XAUT0 } from "@/constants/addresses";
+import { USDT, XAUT } from "@/constants/addresses";
 
 interface OverviewTabProps {
   utilization: string;
@@ -24,13 +24,13 @@ export function OverviewTab({ utilization, oraclePrice, lltv }: OverviewTabProps
         <div className="grid grid-cols-2 gap-x-20 gap-y-6">
           <MarketAttribute
             label="Collateral"
-            value="XAUt0"
-            logo={LOGOS.XAUt0}
-            href={`https://arbiscan.io/address/${XAUT0}`}
+            value="XAUt"
+            logo={LOGOS.XAUt}
+            href={`https://etherscan.io/address/${XAUT}`}
           />
           <MarketAttribute
             label="Oracle price"
-            value={`XAUt0 / USDT0 = ${oraclePrice.toLocaleString(undefined, {
+            value={`XAUt / USDT = ${oraclePrice.toLocaleString(undefined, {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}`}
@@ -38,11 +38,11 @@ export function OverviewTab({ utilization, oraclePrice, lltv }: OverviewTabProps
           />
           <MarketAttribute
             label="Loan"
-            value="USDT0"
-            logo={LOGOS.USDT0}
-            href={`https://arbiscan.io/address/${USDT0}`}
+            value="USDT"
+            logo={LOGOS.USDT}
+            href={`https://etherscan.io/address/${USDT}`}
           />
-          <MarketAttribute label="Created on" value="2026-01-09" simpleValue />
+          <MarketAttribute label="Created on" value="2025-01-28" simpleValue />
           <MarketAttribute
             label="Liquidation LTV"
             value={`${lltv.toFixed(0)}%`}
@@ -71,7 +71,7 @@ export function OverviewTab({ utilization, oraclePrice, lltv }: OverviewTabProps
           <RiskCard
             icon={<Scale className="h-4 w-4 text-amber-500" />}
             title="Liquidation Risk"
-            description={`If your LTV exceeds ${lltv.toFixed(0)}%, your collateral (XAUt0) can be seized. Maintain a safe margin.`}
+            description={`If your LTV exceeds ${lltv.toFixed(0)}%, your collateral (XAUt) can be seized. Maintain a safe margin.`}
           />
           <RiskCard
             icon={<ShieldAlert className="h-4 w-4 text-blue-500" />}
@@ -81,12 +81,12 @@ export function OverviewTab({ utilization, oraclePrice, lltv }: OverviewTabProps
           <RiskCard
             icon={<Droplets className="h-4 w-4 text-emerald-500" />}
             title="Liquidity Risk"
-            description="Low liquidity may impact rates or prevent borrowing further USDT0."
+            description="Low liquidity may impact rates or prevent borrowing further USDT."
           />
           <RiskCard
             icon={<Users className="h-4 w-4 text-purple-500" />}
             title="Counterparty Risk"
-            description="Exposure to XAUt0 and USDT0. Risks include stablecoin de-pegging."
+            description="Exposure to XAUt and USDT. Risks include stablecoin de-pegging."
           />
         </div>
       </div>

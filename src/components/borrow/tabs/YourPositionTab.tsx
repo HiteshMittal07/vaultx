@@ -32,27 +32,27 @@ export function YourPositionTab({
           <div className="flex justify-between items-center border-b border-zinc-800/50 pb-4">
             <span className="text-zinc-400 text-sm">Collateral</span>
             <div className="flex items-center gap-2">
-              <Image src={LOGOS.XAUt0} alt="XAUt0" width={16} height={16} />
+              <Image src={LOGOS.XAUt} alt="XAUt" width={16} height={16} />
               <span className="text-white font-medium">
                 {userCollateral < 0.0001
                   ? "< 0.0001"
                   : userCollateral.toFixed(4)}{" "}
-                XAUt0
+                XAUt
               </span>
               <span className="text-zinc-500 text-xs">
-                ${(userCollateral * pythPrices.XAUt0).toFixed(2)}
+                ${(userCollateral * pythPrices.XAUt).toFixed(2)}
               </span>
             </div>
           </div>
           <div className="flex justify-between items-center border-b border-zinc-800/50 pb-4">
             <span className="text-zinc-400 text-sm">Loan</span>
             <div className="flex items-center gap-2">
-              <Image src={LOGOS.USDT0} alt="USDT0" width={16} height={16} />
+              <Image src={LOGOS.USDT} alt="USDT" width={16} height={16} />
               <span className="text-white font-medium">
-                {userBorrow.toFixed(2)} USDT0
+                {userBorrow.toFixed(2)} USDT
               </span>
               <span className="text-zinc-500 text-xs">
-                ${(userBorrow * pythPrices.USDT0).toFixed(2)}
+                ${(userBorrow * pythPrices.USDT).toFixed(2)}
               </span>
             </div>
           </div>
