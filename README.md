@@ -113,7 +113,7 @@ Agent → /api/aa/execute-offline (with X-Internal-Key)
 
 **Auto-Migration (cron-driven):**
 ```
-GitHub Actions (every 5 min) → GET /api/cron/monitor-positions
+GitHub Actions (every 10 min) → GET /api/cron/monitor-positions
   → Discover users from transaction_history
   → For each user with active Morpho position:
       1. Compare Morpho vs Fluid borrowing rates
@@ -579,7 +579,7 @@ Executes transactions on behalf of users without their real-time signature. Inte
 
 #### `GET /api/cron/monitor-positions`
 
-Monitors all VaultX users' Morpho positions and triggers migration to Fluid when borrowing rates are more favorable. Runs every 5 minutes via GitHub Actions.
+Monitors all VaultX users' Morpho positions and triggers migration to Fluid when borrowing rates are more favorable. Runs every 10 minutes via GitHub Actions.
 
 **Auth:** Requires `Authorization: Bearer <CRON_SECRET>`.
 
