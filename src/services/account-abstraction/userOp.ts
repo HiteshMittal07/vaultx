@@ -14,7 +14,7 @@ import {
   getUserOperationHash,
   toPackedUserOperation,
 } from "viem/account-abstraction";
-import { arbitrum } from "viem/chains";
+import { PROJECT_CHAIN } from "@/constants/config";
 import {
   MAX_VERIFICATION_GAS,
   EXECUTE_USER_OP_SELECTOR,
@@ -23,8 +23,8 @@ import {
 import { getDelegationCode, subtractBaseAndCalldataGas } from "./utils";
 
 const publicClient = createPublicClient({
-  chain: arbitrum,
-  transport: http(),
+  chain: PROJECT_CHAIN,
+  transport: http(process.env.RPC_URL),
 });
 
 /**
@@ -75,7 +75,7 @@ export async function estimateUserOpGas(
   // Handle EntryPoint logic emulation if it's an executeUserOp call
   if (data.startsWith(EXECUTE_USER_OP_SELECTOR)) {
     const userOpHash = getUserOperationHash({
-      chainId: arbitrum.id,
+      chainId: PROJECT_CHAIN.id,
       entryPointAddress: entryPoint07Address,
       entryPointVersion: "0.7",
       userOperation: userOp,
@@ -128,6 +128,8 @@ async function estimateCallGas(
     maxFeePerGas: BigInt(0),
     maxPriorityFeePerGas: BigInt(0),
   });
+
+  console.log("estimated gas", estimatedGas)
 
   return subtractBaseAndCalldataGas(estimatedGas, data);
 }

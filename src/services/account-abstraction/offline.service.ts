@@ -3,7 +3,7 @@ import {
   entryPoint07Address,
   getUserOperationHash,
 } from "viem/account-abstraction";
-import { arbitrum } from "@/constants/config";
+import { PROJECT_CHAIN } from "@/constants/config";
 import { publicClient } from "@/lib/blockchain/client";
 import { BICONOMY_NEXUS_V1_2_0 } from "@/constants/addresses";
 import { AAService } from "./aa.service";
@@ -48,7 +48,7 @@ export async function executeOffline(
     authorization = await sign7702AuthorizationServer(
       walletId,
       BICONOMY_NEXUS_V1_2_0,
-      arbitrum.id,
+      PROJECT_CHAIN.id,
     );
   }
 
@@ -57,7 +57,7 @@ export async function executeOffline(
 
   // 3. Compute UserOp hash
   const userOpHash = getUserOperationHash({
-    chainId: arbitrum.id,
+    chainId: PROJECT_CHAIN.id,
     entryPointAddress: entryPoint07Address,
     entryPointVersion: "0.7",
     userOperation: {

@@ -1,6 +1,6 @@
 # VaultX
 
-DeFi lending + swap platform on Arbitrum. Gasless UX via Account Abstraction (ERC-4337).
+DeFi lending + swap platform on Ethereum. Gasless UX via Account Abstraction (ERC-4337).
 
 ## Commands
 

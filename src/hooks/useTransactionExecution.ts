@@ -8,7 +8,7 @@ import {
 } from "viem/account-abstraction";
 import { publicClient } from "@/lib/blockchain/client";
 import { bigIntReplacer } from "@/services/account-abstraction";
-import { arbitrum } from "@/constants/config";
+import { PROJECT_CHAIN } from "@/constants/config";
 import { usePrivy, useSign7702Authorization } from "@privy-io/react-auth";
 import { BICONOMY_NEXUS_V1_2_0 } from "@/constants/addresses";
 
@@ -74,7 +74,7 @@ export function useTransactionExecution(
         if (!isSmartAccount) {
           authorization = await signAuthorization({
             contractAddress: BICONOMY_NEXUS_V1_2_0,
-            chainId: 42161, // Arbitrum Mainnet
+            chainId: PROJECT_CHAIN.id,
             nonce: 0, // Optional, defaults to current nonce
           });
         }
@@ -108,7 +108,7 @@ export function useTransactionExecution(
 
         // 3. Sign UserOp hash
         const hash = getUserOperationHash({
-          chainId: arbitrum.id,
+          chainId: PROJECT_CHAIN.id,
           entryPointAddress: entryPoint07Address,
           entryPointVersion: "0.7",
           userOperation: {

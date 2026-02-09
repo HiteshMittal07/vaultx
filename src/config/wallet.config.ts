@@ -1,12 +1,12 @@
 import { PrivyClientConfig } from "@privy-io/react-auth";
 import { http } from "viem";
-import { arbitrum } from "viem/chains";
+import { PROJECT_CHAIN } from "@/constants/config";
 import { createConfig } from "@privy-io/wagmi";
 
 export const wagmiConfig = createConfig({
-  chains: [arbitrum],
+  chains: [PROJECT_CHAIN],
   transports: {
-    [arbitrum.id]: http(),
+    [PROJECT_CHAIN.id]: http(process.env.NEXT_PUBLIC_RPC_URL),
   },
 });
 

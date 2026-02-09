@@ -157,7 +157,7 @@ async function testOfflineSupply() {
     assert(true, `Transaction submitted! txHash: ${data.txHash}`);
     assert(!!data.userOpHash, `UserOp hash: ${data.userOpHash}`);
     console.log(
-      `\n  View on Arbiscan: https://arbiscan.io/tx/${data.txHash}`
+      `\n  View on Etherscan: https://etherscan.io/tx/${data.txHash}`,
     );
   } else {
     console.log(`\n  ⚠ Execution returned status ${status}`);

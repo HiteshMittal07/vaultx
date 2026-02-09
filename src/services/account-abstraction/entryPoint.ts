@@ -12,7 +12,7 @@ import {
   entryPoint07Abi,
   toPackedUserOperation,
 } from "viem/account-abstraction";
-import { arbitrum } from "viem/chains";
+import { PROJECT_CHAIN } from "@/constants/config";
 import { privateKeyToAccount } from "viem/accounts";
 /**
  * Sends a signed UserOperation via the EntryPoint.
@@ -25,8 +25,8 @@ export async function sendUserOperation(
 
   const walletClient = createWalletClient({
     account: relayer,
-    chain: arbitrum,
-    transport: http(),
+    chain: PROJECT_CHAIN,
+    transport: http(process.env.RPC_URL),
   });
 
   const packedUserOp = toPackedUserOperation(signedUserOp);
