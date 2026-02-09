@@ -1,6 +1,6 @@
 # VaultX
 
-**VaultX** is a DeFi lending and swap platform on **Arbitrum** with a fully gasless UX powered by Account Abstraction (EIP-7702). Users sign up with email, deposit collateral, borrow stablecoins, and swap tokens — without ever holding ETH for gas.
+**VaultX** is a DeFi lending and swap platform on **Ethereum** with a fully gasless UX powered by Account Abstraction (EIP-7702). Users sign up with email, deposit collateral, borrow stablecoins, and swap tokens — without ever holding ETH for gas.
 
 The backend exposes a complete API surface for both **interactive** (user-signed) and **offline** (agent-driven) transaction execution, making it suitable for autonomous DeFi agents.
 
@@ -15,7 +15,8 @@ The backend exposes a complete API surface for both **interactive** (user-signed
 - **Token Swaps** — Uniswap V3 with slippage protection
 - **Real-Time Oracles** — Pyth Network price feeds for XAUt and USDT
 - **Offline Execution** — Internal API for agents to execute transactions on behalf of users
-- **Auto-Rebalancing** — Cron-driven position monitoring with atomic deleverage (withdraw → swap → repay in one tx)
+- **Protocol Migration** — Automated Morpho → Fluid vault migration via flash loans
+- **Protocol Discovery** — API to compare lending rates across Morpho and Fluid
 - **Security Hardening** — Rate limiting, Zod validation, address ownership checks, audit logging
 - **Agent Policy Management** — Users can approve/revoke agent delegation from the UI
 
@@ -31,7 +32,7 @@ The backend exposes a complete API surface for both **interactive** (user-signed
 | Blockchain | Viem 2.x |
 | Auth | Privy (@privy-io/react-auth + @privy-io/node) |
 | Account Abstraction | Biconomy Nexus (EIP-7702) |
-| Lending | Morpho Blue |
+| Lending | Morpho Blue, Fluid (Instadapp) |
 | Swaps | Uniswap V3 (Quoter + SwapRouter) |
 | Oracles | Pyth Network (Hermes API) |
 | Database | MongoDB |
@@ -56,7 +57,9 @@ src/
 │       ├── borrow/prepare/       # Build borrow UserOps
 │       ├── swap/prepare/         # Build swap UserOps
 │       ├── swap/quote/           # Uniswap V3 quotes
-│       ├── cron/monitor-positions/ # Auto-rebalancing cron job
+│       ├── migrate/prepare/       # Morpho → Fluid migration UserOps
+│       ├── protocols/            # Protocol rate comparison
+│       ├── cron/monitor-positions/ # Position monitoring + auto-migration
 │       ├── balances/             # Token balances
 │       ├── positions/            # Morpho user positions
 │       ├── history/              # Transaction history
@@ -69,7 +72,7 @@ src/
 │   └── ui/                       # Shared UI (Navbar, Toast, Skeleton)
 ├── services/
 │   ├── account-abstraction/      # UserOp creation, signing, relay
-│   ├── api/                      # Borrow, swap, rebalance, policy service layers
+│   ├── api/                      # Borrow, swap, migration, policy service layers
 │   └── privy/                    # Privy server-side utilities
 ├── hooks/                        # React hooks
 │   ├── useTransactionExecution   # Gasless TX orchestration
@@ -108,18 +111,19 @@ Agent → /api/aa/execute-offline (with X-Internal-Key)
      → Transaction confirmed + audit logged
 ```
 
-**Auto-Rebalancing (cron-driven):**
+**Auto-Migration (cron-driven):**
 ```
 GitHub Actions (every 10 min) → GET /api/cron/monitor-positions
   → Discover users from transaction_history
-  → For each user with active position:
-      1. Fetch position health from Morpho (on-chain)
-      2. If LTV > 60% threshold (LLTV is 77%):
-         → Withdraw XAUT collateral
-         → Swap XAUT → USDT via Uniswap V3
-         → Repay USDT debt
-         (all 5 calls in one atomic UserOp)
-      3. Log result to rebalance_log + audit_log
+  → For each user with active Morpho position:
+      1. Compare Morpho vs Fluid borrowing rates
+      2. If Fluid rate is lower by ≥ 0.5%:
+         → Flash-loan USDT to repay Morpho debt
+         → Withdraw XAUt collateral from Morpho
+         → Open Fluid vault position (supply XAUt + borrow USDT)
+         → Repay flash loan
+         (atomic via MigrationHelper contract)
+      3. Log result to migration_log + audit_log
 ```
 
 ---
@@ -157,6 +161,8 @@ cp .env.example .env
 | `MONGODB_URI` | MongoDB connection string (`mongodb+srv://...`) | Yes |
 | `INTERNAL_API_KEY` | API key for internal-only endpoints (offline execution) | Yes |
 | `CRON_SECRET` | Secret for cron endpoint auth (`openssl rand -base64 32`). Add to GitHub Secrets. | Yes |
+| `RPC_URL` | Ethereum RPC endpoint for server-side blockchain calls | Yes |
+| `NEXT_PUBLIC_RPC_URL` | Ethereum RPC endpoint for client-side blockchain calls | Yes |
 
 ### Run
 
@@ -223,13 +229,13 @@ Returns current Pyth oracle prices for XAUt and USDT. No authentication required
 **Response:**
 ```json
 {
-  "XAUt0": {
+  "XAUt": {
     "price": 2945.50,
     "publishTime": 1707350400,
     "exponent": -8,
     "confidence": 1.25
   },
-  "USDT0": {
+  "USDT": {
     "price": 1.0001,
     "publishTime": 1707350400,
     "exponent": -8,
@@ -282,12 +288,12 @@ Returns USDT and XAUt balances for the authenticated user's address.
 **Response:**
 ```json
 {
-  "usdt0": {
+  "usdt": {
     "raw": "1500000000",
     "formatted": "1500.000000",
     "decimals": 6
   },
-  "xaut0": {
+  "xaut": {
     "raw": "500000",
     "formatted": "0.500000",
     "decimals": 6
@@ -569,13 +575,13 @@ Executes transactions on behalf of users without their real-time signature. Inte
 
 ---
 
-### Auto-Rebalancing (Cron)
+### Auto-Migration (Cron)
 
 #### `GET /api/cron/monitor-positions`
 
-Monitors all VaultX users' Morpho positions and triggers atomic rebalancing when LTV exceeds the safety threshold. Runs every 10 minutes via GitHub Actions.
+Monitors all VaultX users' Morpho positions and triggers migration to Fluid when borrowing rates are more favorable. Runs every 10 minutes via GitHub Actions.
 
-**Auth:** Requires `Authorization: Bearer <CRON_SECRET>` (set automatically by Vercel).
+**Auth:** Requires `Authorization: Bearer <CRON_SECRET>`.
 
 **Response:**
 ```json
@@ -583,7 +589,7 @@ Monitors all VaultX users' Morpho positions and triggers atomic rebalancing when
   "success": true,
   "summary": {
     "usersChecked": 5,
-    "rebalancesTriggered": 1,
+    "migrationsTriggered": 1,
     "skipped": 2,
     "errors": 0
   },
@@ -591,14 +597,32 @@ Monitors all VaultX users' Morpho positions and triggers atomic rebalancing when
 }
 ```
 
-**Rebalance logic:**
-- Triggers when `currentLTV > 60%` (market LLTV is 77%)
-- Withdraws 50% of safe withdrawable collateral (XAUT)
-- Swaps XAUT → USDT via Uniswap V3 (2% slippage)
-- Repays USDT debt to Morpho
-- All 5 calls execute atomically in one UserOp
-- 1-hour cooldown between rebalances per user
-- Results logged to `rebalance_log` and `transaction_history` collections
+**Migration logic:**
+- Compares Morpho vs Fluid borrow rates for each user
+- Triggers when Fluid rate is lower by ≥ 0.5%
+- Uses `MigrationHelper` contract with Morpho flash loans
+- Atomically moves collateral + debt from Morpho to Fluid
+- 1-hour cooldown between migrations per user
+- Results logged to `migration_log` and `transaction_history` collections
+
+---
+
+### Protocol Comparison
+
+#### `GET /api/protocols`
+
+Returns current lending rates from Morpho and Fluid for XAUt/USDT markets. No authentication required.
+
+**Response:**
+```json
+{
+  "protocols": [
+    { "name": "Morpho Blue", "borrowRate": 0.0342, "supplyRate": 0.021 },
+    { "name": "Fluid", "borrowRate": 0.028, "supplyRate": 0.018 }
+  ],
+  "timestamp": 1707350400000
+}
+```
 
 ---
 
@@ -620,15 +644,17 @@ All endpoints return errors in a consistent format:
 
 ---
 
-## Contract Addresses (Arbitrum)
+## Contract Addresses (Ethereum)
 
 | Contract | Address |
 |---|---|
-| Morpho Blue | `0x6c247b1F6182318877311737BaC0844bAa518F5e` |
+| Morpho Blue | `0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb` |
+| Fluid Vault (XAUt/USDT) | `0xEce156BeD5aF2621b80b87ff4fE8fD3A929E3644` |
+| MigrationHelper | `0x00A90cCAf7DACb39f29953691a0A8371038cF746` |
 | Uniswap V3 Quoter | `0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6` |
 | Uniswap V3 SwapRouter | `0xE592427A0AEce92De3Edee1F18E0157C05861564` |
-| USDT0 | See `src/constants/addresses.ts` |
-| XAUt0 | See `src/constants/addresses.ts` |
+| USDT | `0xdAC17F958D2ee523a2206206994597C13D831ec7` |
+| XAUt | `0x68749665FF8D2d112Fa859AA293F07A622782F38` |
 
 ---
 
