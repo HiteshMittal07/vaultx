@@ -22,12 +22,15 @@ export async function GET(request: NextRequest) {
     console.error("[Cron] CRON_SECRET env var is not set");
     return NextResponse.json(
       { error: "Server misconfiguration" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
   if (authHeader !== `Bearer ${cronSecret}`) {
-    audit({ event: "auth_failure", details: { endpoint: "/api/cron/monitor-positions" } });
+    audit({
+      event: "auth_failure",
+      details: { endpoint: "/api/cron/monitor-positions" },
+    });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -36,14 +39,14 @@ export async function GET(request: NextRequest) {
     const summary = await monitorAllPositions();
 
     console.log(
-      `[Cron] Completed — checked: ${summary.usersChecked}, rebalanced: ${summary.rebalancesTriggered}, skipped: ${summary.skipped}, errors: ${summary.errors}`
+      `[Cron] Completed — checked: ${summary.usersChecked}, migrated: ${summary.migrationsTriggered}, skipped: ${summary.skipped}, errors: ${summary.errors}`,
     );
 
     return NextResponse.json({
       success: true,
       summary: {
         usersChecked: summary.usersChecked,
-        rebalancesTriggered: summary.rebalancesTriggered,
+        migrationsTriggered: summary.migrationsTriggered,
         skipped: summary.skipped,
         errors: summary.errors,
       },

@@ -7,7 +7,10 @@ import {
   buildRepayAndWithdrawCalls,
   BorrowAction,
 } from "@/services/api/borrow.service";
-import { getMorphoMarketParams, getMorphoUserPosition } from "@/lib/blockchain/utils";
+import {
+  getMorphoMarketParams,
+  getMorphoUserPosition,
+} from "@/lib/blockchain/utils";
 import { AAService, bigIntReplacer } from "@/services/account-abstraction";
 import { MorphoMarketParamsRaw } from "@/types";
 import { MARKET_ID } from "@/constants/addresses";
@@ -50,7 +53,7 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json(
         { error: formatZodError(parsed.error) },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -68,7 +71,10 @@ export async function POST(request: NextRequest) {
       withdrawMax,
     } = parsed.data;
 
-    const ownershipError = await verifyAddressOwnership(auth.userId, userAddress);
+    const ownershipError = await verifyAddressOwnership(
+      auth.userId,
+      userAddress,
+    );
     if (ownershipError) return ownershipError;
 
     // Fetch market params and user position
@@ -80,7 +86,7 @@ export async function POST(request: NextRequest) {
     if (!marketParams) {
       return NextResponse.json(
         { error: "Failed to fetch market parameters" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -92,22 +98,22 @@ export async function POST(request: NextRequest) {
     // Handle combined actions (supply+borrow or repay+withdraw)
     if (supplyAmount || borrowAmount) {
       // Supply and/or Borrow mode
-      calls = buildSupplyAndBorrowCalls(
+      calls = await buildSupplyAndBorrowCalls(
         supplyAmount || "0",
         borrowAmount || "0",
         typedMarketParams,
-        userAddress as Address
+        userAddress as Address,
       );
     } else if (repayAmount || withdrawAmount) {
       // Repay and/or Withdraw mode
-      calls = buildRepayAndWithdrawCalls(
+      calls = await buildRepayAndWithdrawCalls(
         repayAmount || "0",
         withdrawAmount || "0",
         typedMarketParams,
         userAddress as Address,
         repayMax,
         withdrawMax,
-        typedPosition
+        typedPosition,
       );
     } else if (action && amount) {
       // Single action mode
@@ -121,13 +127,10 @@ export async function POST(request: NextRequest) {
       });
 
       if (!validation.valid) {
-        return NextResponse.json(
-          { error: validation.error },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: validation.error }, { status: 400 });
       }
 
-      const result = buildBorrowActionCalls({
+      const result = await buildBorrowActionCalls({
         action: action as BorrowAction,
         amount,
         max,
@@ -140,19 +143,23 @@ export async function POST(request: NextRequest) {
     } else {
       return NextResponse.json(
         { error: "Missing action and amount" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!calls || calls.length === 0) {
       return NextResponse.json(
         { error: "No actions to execute" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Prepare UserOp (authorization needed for gas estimation on EOA wallets)
-    const userOp = await AAService.prepare(userAddress as Address, calls, authorization ?? undefined);
+    const userOp = await AAService.prepare(
+      userAddress as Address,
+      calls,
+      authorization ?? undefined,
+    );
 
     // Serialize UserOp for JSON response
     const serializedUserOp = JSON.parse(JSON.stringify(userOp, bigIntReplacer));
@@ -162,10 +169,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     console.error("Borrow prepare error:", error);
-    const message = error instanceof Error ? error.message : "Failed to prepare borrow action";
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    );
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to prepare borrow action";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

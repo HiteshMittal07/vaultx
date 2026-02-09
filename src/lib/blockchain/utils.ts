@@ -2,7 +2,7 @@ import { Address, formatUnits } from "viem";
 import { publicClient } from "./client";
 import { ERC20_ABI } from "@/constants/abis";
 import { MORPHO_ABI, IRM_ABI, ORACLE_ABI } from "@/constants/abis";
-import { MORPHO_ADDRESS, MARKET_ID } from "@/constants/addresses";
+import { MORPHO_ADDRESS, MARKET_ID, FLUID_VAULT_XAUT_USDT_ID } from "@/constants/addresses";
 /**
  * Fetches the raw BigInt balance of an ERC20 token for a given address.
  */
@@ -212,3 +212,54 @@ export function calculateBorrowAssets(
 
   return (shares * assets) / totalShares / 1e6;
 }
+
+// =============================================================================
+// Fluid (Instadapp) Data Fetching
+// =============================================================================
+
+export interface FluidVaultData {
+  id: number;
+  address: string;
+  collateralToken: string;
+  debtToken: string;
+  collateralFactor: number;
+  liquidationThreshold: number;
+  liquidationPenalty: number;
+  borrowRate: number;
+  totalPositions: number;
+  oraclePrice: number;
+}
+
+/**
+ * Fetches Fluid vault data from the Fluid API.
+ */
+export async function getFluidVaultData(
+  vaultId: number = FLUID_VAULT_XAUT_USDT_ID,
+): Promise<FluidVaultData | null> {
+  try {
+    const response = await fetch(
+      `https://api.fluid.instadapp.io/v2/borrowing/1/vaults/${vaultId}`,
+    );
+    if (!response.ok) {
+      throw new Error(`Fluid API returned ${response.status}`);
+    }
+    const data = await response.json();
+
+    return {
+      id: data.id,
+      address: data.address,
+      collateralToken: data.supplyToken?.symbol ?? "XAUt",
+      debtToken: data.borrowToken?.symbol ?? "USDT",
+      collateralFactor: Number(data.collateralFactor ?? 0.75),
+      liquidationThreshold: Number(data.liquidationThreshold ?? 0.80),
+      liquidationPenalty: Number(data.liquidationPenalty ?? 0.03),
+      borrowRate: Number(data.borrowRate ?? 0),
+      totalPositions: Number(data.totalPositions ?? 0),
+      oraclePrice: Number(data.supplyToken?.price ?? 0),
+    };
+  } catch (error) {
+    console.error("Error fetching Fluid vault data:", error);
+    return null;
+  }
+}
+

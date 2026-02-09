@@ -8,6 +8,7 @@ import {
 import { publicClient } from "@/lib/blockchain/client";
 import { QUOTER_ABI, ROUTER_ABI } from "@/constants/abis";
 import { V3_QUOTER, SWAP_ROUTER_02 } from "@/constants/addresses";
+import { getApproveCallIfNecessary } from "@/lib/blockchain/erc20";
 import { DEFAULT_FEE } from "@/constants/config";
 
 /**
@@ -84,7 +85,7 @@ export async function getQuote(
   tokenOut: Address,
   amountIn: string,
   decimalsIn: number,
-  decimalsOut: number
+  decimalsOut: number,
 ): Promise<SwapQuoteResult> {
   const parsedAmountIn = parseUnits(amountIn, decimalsIn);
 
@@ -105,7 +106,7 @@ export async function getQuote(
  * Builds swap calls with quote (fetches quote and applies slippage).
  */
 export async function buildSwapCallsWithQuote(
-  params: SwapParams
+  params: SwapParams,
 ): Promise<SwapCallsResult & { quote: SwapQuoteResult }> {
   const {
     tokenIn,
@@ -119,36 +120,25 @@ export async function buildSwapCallsWithQuote(
   } = params;
 
   // Get quote
-  const quote = await getQuote(tokenIn, tokenOut, amountIn, decimalsIn, decimalsOut);
+  const quote = await getQuote(
+    tokenIn,
+    tokenOut,
+    amountIn,
+    decimalsIn,
+    decimalsOut,
+  );
 
   // Calculate minimum amount with slippage
   const slippageMultiplier = BigInt(
-    Math.floor((1 - Number(slippage) / 100) * 10000)
+    Math.floor((1 - Number(slippage) / 100) * 10000),
   );
-  const amountOutMinimum = (quote.amountOutRaw * slippageMultiplier) / BigInt(10000);
+  const amountOutMinimum =
+    (quote.amountOutRaw * slippageMultiplier) / BigInt(10000);
 
   const parsedAmountIn = parseUnits(amountIn, decimalsIn);
   const deadlineTimestamp = BigInt(
-    Math.floor(Date.now() / 1000) + Number(deadline) * 60
+    Math.floor(Date.now() / 1000) + Number(deadline) * 60,
   );
-
-  // Build approve call
-  const approveData = encodeFunctionData({
-    abi: [
-      {
-        name: "approve",
-        type: "function",
-        stateMutability: "nonpayable",
-        inputs: [
-          { name: "spender", type: "address" },
-          { name: "amount", type: "uint256" },
-        ],
-        outputs: [{ name: "", type: "bool" }],
-      },
-    ],
-    functionName: "approve",
-    args: [SWAP_ROUTER_02 as Address, parsedAmountIn],
-  });
 
   // Build swap call with calculated minimum
   const swapData = encodeFunctionData({
@@ -168,18 +158,23 @@ export async function buildSwapCallsWithQuote(
     ],
   });
 
-  const calls: Call[] = [
-    {
-      to: tokenIn,
-      data: approveData,
-      value: BigInt(0),
-    },
-    {
-      to: SWAP_ROUTER_02 as Address,
-      data: swapData,
-      value: BigInt(0),
-    },
-  ];
+  const calls: Call[] = [];
+
+  // Add approve call if necessary
+  const approveCalls = await getApproveCallIfNecessary(
+    tokenIn,
+    recipient,
+    SWAP_ROUTER_02 as Address,
+    parsedAmountIn,
+  );
+
+  calls.push(...approveCalls);
+
+  calls.push({
+    to: SWAP_ROUTER_02 as Address,
+    data: swapData,
+    value: BigInt(0),
+  });
 
   return {
     calls,

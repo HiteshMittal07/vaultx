@@ -217,7 +217,7 @@ async function buildBorrowCalls(userAddress: Address, params: any) {
       throw new Error(validation.error);
     }
 
-    const result = buildBorrowActionCalls({
+    const result = await buildBorrowActionCalls({
       action: action as BorrowAction,
       amount,
       max,

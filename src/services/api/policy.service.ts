@@ -15,8 +15,9 @@ import { Address, Hex, getAddress, slice } from "viem";
 import {
   MORPHO_ADDRESS,
   SWAP_ROUTER_02,
-  USDT0,
-  XAUT0,
+  MIGRATION_HELPER_ADDRESS,
+  USDT,
+  XAUT,
 } from "@/constants/addresses";
 
 // ─── Function Selectors (first 4 bytes of keccak256 of function signature) ────
@@ -33,6 +34,12 @@ const SELECTORS = {
 
   // Uniswap V3
   exactInputSingle: "0x414bf389" as Hex, // exactInputSingle(ExactInputSingleParams)
+
+  // Morpho Blue Authorization (for migration)
+  setAuthorization: "0xeecea000" as Hex, // setAuthorization(address,bool)
+
+  // MigrationHelper
+  migrate: "0x197d8562" as Hex, // migrate(MigrationParams)
 } as const;
 
 // ─── Per-Contract Allowed Functions ──────────────────────────────────────────
@@ -52,13 +59,18 @@ const ALLOWED_CONTRACTS: Record<string, AllowedContract> = {
       SELECTORS.borrow,
       SELECTORS.repay,
       SELECTORS.withdrawCollateral,
+      SELECTORS.setAuthorization,
     ],
   },
+  [getAddress(MIGRATION_HELPER_ADDRESS)]: {
+    name: "Migration Helper",
+    selectors: [SELECTORS.migrate],
+  } as AllowedContract,
   [getAddress(SWAP_ROUTER_02)]: {
     name: "Uniswap V3 Router",
     selectors: [SELECTORS.exactInputSingle],
   },
-  [getAddress(USDT0)]: {
+  [getAddress(USDT)]: {
     name: "USDT",
     selectors: [SELECTORS.approve],
     allowedApproveSpenders: [
@@ -66,7 +78,7 @@ const ALLOWED_CONTRACTS: Record<string, AllowedContract> = {
       getAddress(SWAP_ROUTER_02),
     ],
   },
-  [getAddress(XAUT0)]: {
+  [getAddress(XAUT)]: {
     name: "XAUt",
     selectors: [SELECTORS.approve],
     allowedApproveSpenders: [
@@ -156,7 +168,7 @@ function validateSingleCall(call: Call, index: number): PolicyResult {
 
   const selector = slice(call.data, 0, 4);
   const isAllowed = contract.selectors.some(
-    (s) => s.toLowerCase() === selector.toLowerCase()
+    (s) => s.toLowerCase() === selector.toLowerCase(),
   );
 
   if (!isAllowed) {
@@ -175,7 +187,7 @@ function validateSingleCall(call: Call, index: number): PolicyResult {
       call.data,
       contract.allowedApproveSpenders,
       contract.name,
-      prefix
+      prefix,
     );
     if (!spenderResult.valid) {
       return spenderResult;
@@ -193,7 +205,7 @@ function validateApproveSpender(
   data: Hex,
   allowedSpenders: readonly Address[],
   contractName: string,
-  prefix: string
+  prefix: string,
 ): PolicyResult {
   // approve(address,uint256) calldata layout:
   // 4 bytes selector + 32 bytes address (left-padded) + 32 bytes amount
@@ -210,9 +222,7 @@ function validateApproveSpender(
 
   try {
     const spender = getAddress(spenderHex);
-    const isAllowed = allowedSpenders.some(
-      (s) => getAddress(s) === spender
-    );
+    const isAllowed = allowedSpenders.some((s) => getAddress(s) === spender);
 
     if (!isAllowed) {
       return {

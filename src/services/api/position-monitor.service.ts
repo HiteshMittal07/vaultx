@@ -1,28 +1,25 @@
 import { Address } from "viem";
 import { getDb } from "@/lib/mongodb";
-import {
-  getMorphoMarketData,
-  getOraclePrice,
-} from "@/lib/blockchain/utils";
+import { getMorphoMarketData, getOraclePrice } from "@/lib/blockchain/utils";
 import {
   parseUserPosition,
   parseLLTV,
   computePositionMetrics,
 } from "@/lib/calculations";
-import { buildRebalanceCalls } from "@/services/api/rebalance.service";
+import { buildMigrationCalls } from "@/services/api/migration.service";
 import { validateCallsAgainstPolicy } from "@/services/api/policy.service";
 import { executeOffline } from "@/services/account-abstraction/offline.service";
 import { audit } from "@/lib/audit";
 
 // ─── Configurable Thresholds ────────────────────────────────────
-// Market LLTV is 77% — trigger rebalancing at 60% LTV
+// Market LLTV is 77% — trigger migration at 60% LTV
 // which gives a 17% buffer before liquidation.
 
-/** LTV percentage above which rebalancing is triggered */
-const LTV_REBALANCE_THRESHOLD = 60;
+/** LTV percentage above which migration is triggered */
+const LTV_MIGRATE_THRESHOLD = 60;
 
-/** Minimum time between rebalances per user (1 hour) */
-const REBALANCE_COOLDOWN_MS = 60 * 60 * 1000;
+/** Minimum time between migrations per user (1 hour) */
+const MIGRATION_COOLDOWN_MS = 60 * 60 * 1000;
 
 /** Maximum users to process per cron invocation */
 const MAX_USERS_PER_RUN = 10;
@@ -31,7 +28,7 @@ const MAX_USERS_PER_RUN = 10;
 
 export interface MonitorSummary {
   usersChecked: number;
-  rebalancesTriggered: number;
+  migrationsTriggered: number;
   skipped: number;
   errors: number;
   details: MonitorDetail[];
@@ -39,10 +36,9 @@ export interface MonitorSummary {
 
 interface MonitorDetail {
   address: string;
-  action: "rebalanced" | "skipped" | "error" | "healthy";
+  action: "migrated" | "skipped" | "error" | "healthy";
   reason?: string;
   ltvBefore?: number;
-  ltvAfter?: number;
   txHash?: string;
 }
 
@@ -65,17 +61,17 @@ async function getMonitoredUsers(): Promise<string[]> {
 // ─── Cooldown Check ─────────────────────────────────────────────
 
 /**
- * Checks if a user was recently rebalanced (within cooldown period).
+ * Checks if a user was recently migrated (within cooldown period).
  */
 async function isOnCooldown(walletAddress: string): Promise<boolean> {
   const db = await getDb();
-  const recent = await db.collection("rebalance_log").findOne(
+  const recent = await db.collection("migration_log").findOne(
     {
       walletAddress: walletAddress.toLowerCase(),
-      action: "rebalanced",
-      timestamp: { $gte: new Date(Date.now() - REBALANCE_COOLDOWN_MS) },
+      action: "migrated",
+      timestamp: { $gte: new Date(Date.now() - MIGRATION_COOLDOWN_MS) },
     },
-    { sort: { timestamp: -1 } }
+    { sort: { timestamp: -1 } },
   );
   return !!recent;
 }
@@ -84,10 +80,10 @@ async function isOnCooldown(walletAddress: string): Promise<boolean> {
 
 /**
  * Checks a single user's position health and returns whether
- * rebalancing is needed.
+ * migration is needed.
  */
 async function checkPositionHealth(userAddress: Address): Promise<{
-  needsRebalance: boolean;
+  needsMigration: boolean;
   hasPosition: boolean;
   currentLTV: number;
   userCollateral: number;
@@ -99,7 +95,7 @@ async function checkPositionHealth(userAddress: Address): Promise<{
 
   if (!params || !state || !position) {
     return {
-      needsRebalance: false,
+      needsMigration: false,
       hasPosition: false,
       currentLTV: 0,
       userCollateral: 0,
@@ -120,11 +116,14 @@ async function checkPositionHealth(userAddress: Address): Promise<{
   const hasPosition = userCollateral > 0 && userBorrow > 0;
 
   const { currentLTV } = computePositionMetrics(
-    userCollateral, userBorrow, oraclePrice, lltv
+    userCollateral,
+    userBorrow,
+    oraclePrice,
+    lltv,
   );
 
   return {
-    needsRebalance: hasPosition && currentLTV > LTV_REBALANCE_THRESHOLD,
+    needsMigration: hasPosition && currentLTV > LTV_MIGRATE_THRESHOLD,
     hasPosition,
     currentLTV,
     userCollateral,
@@ -136,38 +135,37 @@ async function checkPositionHealth(userAddress: Address): Promise<{
 
 // ─── Logging ────────────────────────────────────────────────────
 
-async function logRebalanceResult(entry: {
+async function logMigrationResult(entry: {
   walletAddress: string;
-  action: "rebalanced" | "skipped" | "error";
+  action: "migrated" | "skipped" | "error";
   ltvBefore?: number;
-  ltvAfter?: number;
-  withdrawXAUT?: number;
-  repaidUSDT?: number;
+  debtMigrated?: number;
+  collateralMigrated?: number;
   txHash?: string;
   error?: string;
 }): Promise<void> {
   try {
     const db = await getDb();
-    await db.collection("rebalance_log").insertOne({
+    await db.collection("migration_log").insertOne({
       ...entry,
       walletAddress: entry.walletAddress.toLowerCase(),
       timestamp: new Date(),
     });
   } catch (err) {
-    console.error("[Monitor] Failed to log rebalance result:", err);
+    console.error("[Monitor] Failed to log migration result:", err);
   }
 }
 
 // ─── Main Monitor ───────────────────────────────────────────────
 
 /**
- * Monitors all VaultX users' positions and triggers rebalancing
+ * Monitors all VaultX users' positions and triggers migration
  * for any that exceed the LTV threshold.
  */
 export async function monitorAllPositions(): Promise<MonitorSummary> {
   const summary: MonitorSummary = {
     usersChecked: 0,
-    rebalancesTriggered: 0,
+    migrationsTriggered: 0,
     skipped: 0,
     errors: 0,
     details: [],
@@ -204,7 +202,7 @@ export async function monitorAllPositions(): Promise<MonitorSummary> {
         continue;
       }
 
-      if (!health.needsRebalance) {
+      if (!health.needsMigration) {
         summary.details.push({
           address: walletAddress,
           action: "healthy",
@@ -213,14 +211,14 @@ export async function monitorAllPositions(): Promise<MonitorSummary> {
         continue;
       }
 
-      // Position needs rebalancing
+      // Position needs migration
       console.log(
-        `[Monitor] Rebalancing ${walletAddress} — LTV: ${health.currentLTV.toFixed(2)}%`
+        `[Monitor] Migrating ${walletAddress} — LTV: ${health.currentLTV.toFixed(2)}%`,
       );
 
-      const { calls, calculation } = await buildRebalanceCalls(
-        walletAddress as Address
-      );
+      const { calls, calculation } = await buildMigrationCalls({
+        userAddress: walletAddress as Address,
+      });
 
       // Validate against policy
       const policyCheck = validateCallsAgainstPolicy(calls);
@@ -228,10 +226,10 @@ export async function monitorAllPositions(): Promise<MonitorSummary> {
         audit({
           event: "policy_violation",
           userAddress: walletAddress,
-          action: "rebalance",
+          action: "migrate",
           details: { error: policyCheck.error },
         });
-        await logRebalanceResult({
+        await logMigrationResult({
           walletAddress,
           action: "error",
           ltvBefore: health.currentLTV,
@@ -248,24 +246,21 @@ export async function monitorAllPositions(): Promise<MonitorSummary> {
       }
 
       // Execute atomically
-      const { txHash } = await executeOffline(
-        walletAddress as Address,
-        calls
-      );
+      const { txHash } = await executeOffline(walletAddress as Address, calls);
 
       // Log to transaction_history
       try {
         const db = await getDb();
         await db.collection("transaction_history").insertOne({
           walletAddress: walletAddress.toLowerCase(),
-          action: "rebalance",
+          action: "migrate",
           txHash,
           executedBy: "vaultx-agent",
           status: "success",
-          withdrawXAUT: calculation.withdrawAmountXAUT,
-          estimatedUSDT: calculation.estimatedUSDTOut,
+          debtMigrated: calculation.debtToRepay,
+          collateralMigrated: calculation.collateralToMigrate,
+          borrowOnFluid: calculation.borrowOnFluid,
           ltvBefore: calculation.currentLTV,
-          ltvAfter: calculation.estimatedNewLTV,
           oraclePrice: calculation.oraclePrice,
           timestamp: new Date(),
         });
@@ -273,42 +268,40 @@ export async function monitorAllPositions(): Promise<MonitorSummary> {
         console.error("[Monitor] Failed to save history:", historyErr);
       }
 
-      // Log to rebalance_log for cooldown tracking
-      await logRebalanceResult({
+      // Log to migration_log for cooldown tracking
+      await logMigrationResult({
         walletAddress,
-        action: "rebalanced",
+        action: "migrated",
         ltvBefore: calculation.currentLTV,
-        ltvAfter: calculation.estimatedNewLTV,
-        withdrawXAUT: calculation.withdrawAmountXAUT,
-        repaidUSDT: calculation.estimatedUSDTOut,
+        debtMigrated: calculation.debtToRepay,
+        collateralMigrated: calculation.collateralToMigrate,
         txHash,
       });
 
       audit({
         event: "offline_execution",
         userAddress: walletAddress,
-        action: "rebalance",
+        action: "migrate",
         details: {
           txHash,
           ltvBefore: calculation.currentLTV,
-          ltvAfter: calculation.estimatedNewLTV,
-          withdrawXAUT: calculation.withdrawAmountXAUT,
+          debtMigrated: calculation.debtToRepay,
+          collateralMigrated: calculation.collateralToMigrate,
         },
       });
 
-      summary.rebalancesTriggered++;
+      summary.migrationsTriggered++;
       summary.details.push({
         address: walletAddress,
-        action: "rebalanced",
+        action: "migrated",
         ltvBefore: calculation.currentLTV,
-        ltvAfter: calculation.estimatedNewLTV,
         txHash,
       });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Unknown error";
       console.error(`[Monitor] Error processing ${walletAddress}:`, errorMsg);
 
-      await logRebalanceResult({
+      await logMigrationResult({
         walletAddress,
         action: "error",
         error: errorMsg,
@@ -317,7 +310,7 @@ export async function monitorAllPositions(): Promise<MonitorSummary> {
       audit({
         event: "offline_execution_failed",
         userAddress: walletAddress,
-        action: "rebalance",
+        action: "migrate",
         details: { error: errorMsg },
       });
 

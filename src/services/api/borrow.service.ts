@@ -1,15 +1,7 @@
-import {
-  parseUnits,
-  Address,
-  encodeFunctionData,
-  Call,
-} from "viem";
-import { ERC20_ABI, MORPHO_ABI } from "@/constants/abis";
-import {
-  USDT0,
-  XAUT0,
-  MORPHO_ADDRESS,
-} from "@/constants/addresses";
+import { parseUnits, Address, encodeFunctionData, Call } from "viem";
+import { MORPHO_ABI } from "@/constants/abis";
+import { USDT, XAUT, MORPHO_ADDRESS } from "@/constants/addresses";
+import { getApproveCallIfNecessary } from "@/lib/blockchain/erc20";
 
 type MarketParams = any;
 
@@ -45,7 +37,12 @@ export function validateBorrowParams(params: BorrowParams): {
   const { action, amount, marketParams, userAddress } = params;
 
   // Check action
-  const validActions: BorrowAction[] = ["supply", "borrow", "repay", "withdraw"];
+  const validActions: BorrowAction[] = [
+    "supply",
+    "borrow",
+    "repay",
+    "withdraw",
+  ];
   if (!validActions.includes(action)) {
     return { valid: false, error: "Invalid action" };
   }
@@ -72,43 +69,44 @@ export function validateBorrowParams(params: BorrowParams): {
 /**
  * Builds supply collateral calls.
  */
-export function buildSupplyCalls(
+export async function buildSupplyCalls(
   amount: string,
   marketParams: MarketParams,
-  userAddress: Address
-): Call[] {
+  userAddress: Address,
+): Promise<Call[]> {
   const parsedAmount = parseUnits(amount, 6);
+  const calls: Call[] = [];
 
-  return [
-    {
-      to: XAUT0 as Address,
-      data: encodeFunctionData({
-        abi: ERC20_ABI,
-        functionName: "approve",
-        args: [MORPHO_ADDRESS, parsedAmount],
-      }),
-      value: BigInt(0),
-    },
-    {
-      to: MORPHO_ADDRESS as Address,
-      data: encodeFunctionData({
-        abi: MORPHO_ABI,
-        functionName: "supplyCollateral",
-        args: [marketParams, parsedAmount, userAddress, "0x"],
-      }),
-      value: BigInt(0),
-    },
-  ];
+  // Add approve call if necessary
+  const approveCalls = await getApproveCallIfNecessary(
+    XAUT as Address,
+    userAddress,
+    MORPHO_ADDRESS as Address,
+    parsedAmount,
+  );
+  calls.push(...approveCalls);
+
+  calls.push({
+    to: MORPHO_ADDRESS as Address,
+    data: encodeFunctionData({
+      abi: MORPHO_ABI,
+      functionName: "supplyCollateral",
+      args: [marketParams, parsedAmount, userAddress, "0x"],
+    }),
+    value: BigInt(0),
+  });
+
+  return calls;
 }
 
 /**
  * Builds borrow calls.
  */
-export function buildBorrowCalls(
+export async function buildBorrowCalls(
   amount: string,
   marketParams: MarketParams,
-  userAddress: Address
-): Call[] {
+  userAddress: Address,
+): Promise<Call[]> {
   const parsedAmount = parseUnits(amount, 6);
 
   return [
@@ -117,13 +115,7 @@ export function buildBorrowCalls(
       data: encodeFunctionData({
         abi: MORPHO_ABI,
         functionName: "borrow",
-        args: [
-          marketParams,
-          parsedAmount,
-          BigInt(0),
-          userAddress,
-          userAddress,
-        ],
+        args: [marketParams, parsedAmount, BigInt(0), userAddress, userAddress],
       }),
       value: BigInt(0),
     },
@@ -133,60 +125,56 @@ export function buildBorrowCalls(
 /**
  * Builds repay calls.
  */
-export function buildRepayCalls(
+export async function buildRepayCalls(
   amount: string,
   marketParams: MarketParams,
   userAddress: Address,
   max?: boolean,
-  userPosition?: readonly bigint[] | null
-): Call[] {
+  userPosition?: readonly bigint[] | null,
+): Promise<Call[]> {
   const approvalAmount = max
     ? BigInt(
-        "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       )
     : parseUnits(amount, 6);
 
   const assetsToRepay = max ? BigInt(0) : parseUnits(amount, 6);
   const sharesToRepay = max ? BigInt(userPosition?.[1] || 0) : BigInt(0);
 
-  return [
-    {
-      to: USDT0 as Address,
-      data: encodeFunctionData({
-        abi: ERC20_ABI,
-        functionName: "approve",
-        args: [MORPHO_ADDRESS, approvalAmount],
-      }),
-      value: BigInt(0),
-    },
-    {
-      to: MORPHO_ADDRESS as Address,
-      data: encodeFunctionData({
-        abi: MORPHO_ABI,
-        functionName: "repay",
-        args: [
-          marketParams,
-          assetsToRepay,
-          sharesToRepay,
-          userAddress,
-          "0x",
-        ],
-      }),
-      value: BigInt(0),
-    },
-  ];
+  const calls: Call[] = [];
+
+  // Add approve call if necessary
+  const approveCalls = await getApproveCallIfNecessary(
+    USDT as Address,
+    userAddress,
+    MORPHO_ADDRESS as Address,
+    approvalAmount,
+  );
+  calls.push(...approveCalls);
+
+  calls.push({
+    to: MORPHO_ADDRESS as Address,
+    data: encodeFunctionData({
+      abi: MORPHO_ABI,
+      functionName: "repay",
+      args: [marketParams, assetsToRepay, sharesToRepay, userAddress, "0x"],
+    }),
+    value: BigInt(0),
+  });
+
+  return calls;
 }
 
 /**
  * Builds withdraw collateral calls.
  */
-export function buildWithdrawCalls(
+export async function buildWithdrawCalls(
   amount: string,
   marketParams: MarketParams,
   userAddress: Address,
   max?: boolean,
-  userPosition?: readonly bigint[] | null
-): Call[] {
+  userPosition?: readonly bigint[] | null,
+): Promise<Call[]> {
   const parsedAmount = max
     ? BigInt(userPosition?.[2] || 0)
     : parseUnits(amount, 6);
@@ -197,12 +185,7 @@ export function buildWithdrawCalls(
       data: encodeFunctionData({
         abi: MORPHO_ABI,
         functionName: "withdrawCollateral",
-        args: [
-          marketParams,
-          parsedAmount,
-          userAddress,
-          userAddress,
-        ],
+        args: [marketParams, parsedAmount, userAddress, userAddress],
       }),
       value: BigInt(0),
     },
@@ -212,31 +195,50 @@ export function buildWithdrawCalls(
 /**
  * Builds calls for the given action.
  */
-export function buildBorrowActionCalls(params: BorrowParams): BorrowCallsResult {
-  const { action, amount, max, marketParams, userAddress, userPosition } = params;
+export async function buildBorrowActionCalls(
+  params: BorrowParams,
+): Promise<BorrowCallsResult> {
+  const { action, amount, max, marketParams, userAddress, userPosition } =
+    params;
 
   let calls: Call[] = [];
   let parsedAmount = BigInt(0);
 
   switch (action) {
     case "supply":
-      calls = buildSupplyCalls(amount, marketParams, userAddress);
+      calls = await buildSupplyCalls(amount, marketParams, userAddress);
       parsedAmount = parseUnits(amount, 6);
       break;
 
     case "borrow":
-      calls = buildBorrowCalls(amount, marketParams, userAddress);
+      calls = await buildBorrowCalls(amount, marketParams, userAddress);
       parsedAmount = parseUnits(amount, 6);
       break;
 
     case "repay":
-      calls = buildRepayCalls(amount, marketParams, userAddress, max, userPosition);
-      parsedAmount = max ? BigInt(userPosition?.[1] || 0) : parseUnits(amount, 6);
+      calls = await buildRepayCalls(
+        amount,
+        marketParams,
+        userAddress,
+        max,
+        userPosition,
+      );
+      parsedAmount = max
+        ? BigInt(userPosition?.[1] || 0)
+        : parseUnits(amount, 6);
       break;
 
     case "withdraw":
-      calls = buildWithdrawCalls(amount, marketParams, userAddress, max, userPosition);
-      parsedAmount = max ? BigInt(userPosition?.[2] || 0) : parseUnits(amount, 6);
+      calls = await buildWithdrawCalls(
+        amount,
+        marketParams,
+        userAddress,
+        max,
+        userPosition,
+      );
+      parsedAmount = max
+        ? BigInt(userPosition?.[2] || 0)
+        : parseUnits(amount, 6);
       break;
   }
 
@@ -250,20 +252,30 @@ export function buildBorrowActionCalls(params: BorrowParams): BorrowCallsResult 
 /**
  * Builds combined calls for supply + borrow in one transaction.
  */
-export function buildSupplyAndBorrowCalls(
+export async function buildSupplyAndBorrowCalls(
   supplyAmount: string,
   borrowAmount: string,
   marketParams: MarketParams,
-  userAddress: Address
-): Call[] {
+  userAddress: Address,
+): Promise<Call[]> {
   const calls: Call[] = [];
 
   if (Number(supplyAmount) > 0) {
-    calls.push(...buildSupplyCalls(supplyAmount, marketParams, userAddress));
+    const supplyCalls = await buildSupplyCalls(
+      supplyAmount,
+      marketParams,
+      userAddress,
+    );
+    calls.push(...supplyCalls);
   }
 
   if (Number(borrowAmount) > 0) {
-    calls.push(...buildBorrowCalls(borrowAmount, marketParams, userAddress));
+    const borrowCalls = await buildBorrowCalls(
+      borrowAmount,
+      marketParams,
+      userAddress,
+    );
+    calls.push(...borrowCalls);
   }
 
   return calls;
@@ -272,27 +284,37 @@ export function buildSupplyAndBorrowCalls(
 /**
  * Builds combined calls for repay + withdraw in one transaction.
  */
-export function buildRepayAndWithdrawCalls(
+export async function buildRepayAndWithdrawCalls(
   repayAmount: string,
   withdrawAmount: string,
   marketParams: MarketParams,
   userAddress: Address,
   repayMax?: boolean,
   withdrawMax?: boolean,
-  userPosition?: readonly bigint[] | null
-): Call[] {
+  userPosition?: readonly bigint[] | null,
+): Promise<Call[]> {
   const calls: Call[] = [];
 
   if (Number(repayAmount) > 0) {
-    calls.push(
-      ...buildRepayCalls(repayAmount, marketParams, userAddress, repayMax, userPosition)
+    const repayCalls = await buildRepayCalls(
+      repayAmount,
+      marketParams,
+      userAddress,
+      repayMax,
+      userPosition,
     );
+    calls.push(...repayCalls);
   }
 
   if (Number(withdrawAmount) > 0) {
-    calls.push(
-      ...buildWithdrawCalls(withdrawAmount, marketParams, userAddress, withdrawMax, userPosition)
+    const withdrawCalls = await buildWithdrawCalls(
+      withdrawAmount,
+      marketParams,
+      userAddress,
+      withdrawMax,
+      userPosition,
     );
+    calls.push(...withdrawCalls);
   }
 
   return calls;
