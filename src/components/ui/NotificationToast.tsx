@@ -58,12 +58,12 @@ export function NotificationToast({
 
               {notification.txHash && (
                 <a
-                  href={`https://arbiscan.io/tx/${notification.txHash}`}
+                  href={`https://etherscan.io/tx/${notification.txHash}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-2 flex items-center gap-1 text-[10px] font-bold text-emerald-500 hover:text-emerald-400 uppercase tracking-wider"
                 >
-                  View on Arbiscan
+                  View on Etherscan
                   <ExternalLink className="h-3 w-3" />
                 </a>
               )}
@@ -127,12 +127,12 @@ export function InlineNotificationToast({
 
               {notification.txHash && (
                 <a
-                  href={`https://arbiscan.io/tx/${notification.txHash}`}
+                  href={`https://etherscan.io/tx/${notification.txHash}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-2 flex items-center gap-1 text-[10px] font-bold text-emerald-500 hover:text-emerald-400 uppercase tracking-wider"
                 >
-                  View on Arbiscan
+                  View on Etherscan
                   <ExternalLink className="h-3 w-3" />
                 </a>
               )}
