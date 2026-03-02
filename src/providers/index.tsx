@@ -5,15 +5,21 @@ import { PrivyProvider } from "@privy-io/react-auth";
 import { WagmiProvider } from "@privy-io/wagmi";
 import { wagmiConfig, privyConfig } from "@/config/wallet.config";
 import { useState } from "react";
-import "dotenv/config";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
 
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
+  // During Next.js static prerendering (build time), NEXT_PUBLIC_ vars may be
+  // absent. Render children without Privy wrapping — the real value is injected
+  // by Vercel at runtime for all actual user-facing requests.
   if (!appId) {
-    throw new Error("NEXT_PUBLIC_PRIVY_APP_ID is not defined");
+    return (
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    );
   }
 
   return (

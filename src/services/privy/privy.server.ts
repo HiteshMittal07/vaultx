@@ -1,42 +1,73 @@
 import { PrivyClient } from "@privy-io/node";
 import { Authorization, Hex } from "viem";
 
-const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID!;
-const PRIVY_APP_SECRET = process.env.APP_SECRET!;
-const AUTHORIZATION_PRIVATE_KEY = process.env.AUTHORIZATION_PRIVATE_KEY!;
+// ─── Lazy singletons ─────────────────────────────────────────────────────────
+// All env-dependent objects are created lazily on first use so that Next.js
+// can collect static page data at build time without blowing up on missing
+// environment variables.
 
-const privy = new PrivyClient({
-  appId: PRIVY_APP_ID,
-  appSecret: PRIVY_APP_SECRET,
-});
+let _privy: PrivyClient | null = null;
+let _basicAuth: string | null = null;
+let _headers: Record<string, string> | null = null;
 
-const basicAuth = Buffer.from(`${PRIVY_APP_ID}:${PRIVY_APP_SECRET}`).toString(
-  "base64"
-);
+function getPrivyClient(): PrivyClient {
+  if (_privy) return _privy;
 
-const PRIVY_HEADERS = {
-  Authorization: `Basic ${basicAuth}`,
-  "privy-app-id": PRIVY_APP_ID,
-  "Content-Type": "application/json",
-};
+  const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+  const appSecret = process.env.APP_SECRET;
+
+  if (!appId || !appSecret) {
+    throw new Error(
+      "[Privy] NEXT_PUBLIC_PRIVY_APP_ID or APP_SECRET env var is not set."
+    );
+  }
+
+  _privy = new PrivyClient({ appId, appSecret });
+  return _privy;
+}
+
+function getBasicAuth(): string {
+  if (_basicAuth) return _basicAuth;
+  const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+  const appSecret = process.env.APP_SECRET;
+  if (!appId || !appSecret) throw new Error("[Privy] Missing env vars.");
+  _basicAuth = Buffer.from(`${appId}:${appSecret}`).toString("base64");
+  return _basicAuth;
+}
+
+function getPrivyHeaders(): Record<string, string> {
+  if (_headers) return _headers;
+  const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+  if (!appId) throw new Error("[Privy] Missing NEXT_PUBLIC_PRIVY_APP_ID.");
+  _headers = {
+    Authorization: `Basic ${getBasicAuth()}`,
+    "privy-app-id": appId,
+    "Content-Type": "application/json",
+  };
+  return _headers;
+}
+
+function getAuthorizationKey(): string {
+  const key = process.env.AUTHORIZATION_PRIVATE_KEY;
+  if (!key) throw new Error("[Privy] AUTHORIZATION_PRIVATE_KEY env var is not set.");
+  return key;
+}
+
+// ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
  * Resolves an Ethereum address to a Privy wallet ID.
- *
- * Two-step lookup:
- * 1. POST /v1/users/wallet/address  (body: { address }) → get user ID
- * 2. GET  /v1/wallets?user_id={userId}&chain_type=ethereum → find matching wallet
  */
 export async function getPrivyWalletId(
   ethereumAddress: string
 ): Promise<string> {
-  // Step 1: Look up user by wallet address
-  // Docs: POST /v1/users/wallet/address  body: { address: "0x..." }
+  const headers = getPrivyHeaders();
+
   const userResponse = await fetch(
     "https://api.privy.io/v1/users/wallet/address",
     {
       method: "POST",
-      headers: PRIVY_HEADERS,
+      headers,
       body: JSON.stringify({ address: ethereumAddress }),
     }
   );
@@ -50,18 +81,11 @@ export async function getPrivyWalletId(
 
   const userData = await userResponse.json();
   const userId = userData.id;
+  if (!userId) throw new Error(`No user ID found for address ${ethereumAddress}`);
 
-  if (!userId) {
-    throw new Error(`No user ID found for address ${ethereumAddress}`);
-  }
-
-  // Step 2: Get wallets for this user
   const walletsResponse = await fetch(
     `https://api.privy.io/v1/wallets?user_id=${userId}&chain_type=ethereum`,
-    {
-      method: "GET",
-      headers: PRIVY_HEADERS,
-    }
+    { method: "GET", headers }
   );
 
   if (!walletsResponse.ok) {
@@ -73,7 +97,6 @@ export async function getPrivyWalletId(
 
   const walletsData = await walletsResponse.json();
   const wallets = walletsData.data || [];
-
   const matchingWallet = wallets.find(
     (w: { address: string }) =>
       w.address.toLowerCase() === ethereumAddress.toLowerCase()
@@ -88,21 +111,21 @@ export async function getPrivyWalletId(
 
 /**
  * Signs a UserOp hash using the server's authorization key via Privy.
- *
- * Uses signMessage (personal_sign) to match the frontend's signing method,
- * since the Biconomy Nexus smart account validator expects this format.
  */
 export async function signUserOpHash(
   walletId: string,
   userOpHash: Hex
 ): Promise<Hex> {
+  const privy = getPrivyClient();
+  const authKey = getAuthorizationKey();
+
   const response = await privy
     .wallets()
     .ethereum()
     .signMessage(walletId, {
       message: userOpHash,
       authorization_context: {
-        authorization_private_keys: [AUTHORIZATION_PRIVATE_KEY],
+        authorization_private_keys: [authKey],
       },
     });
 
@@ -111,16 +134,15 @@ export async function signUserOpHash(
 
 /**
  * Signs an EIP-7702 authorization via Privy server SDK.
- *
- * Used in the offline flow when the user's wallet is still an EOA
- * (no delegation bytecode yet). The authorization delegates the EOA
- * to Biconomy Nexus so it can execute UserOps.
  */
 export async function sign7702AuthorizationServer(
   walletId: string,
   contractAddress: string,
-  chainId: number,
+  chainId: number
 ): Promise<Authorization> {
+  const privy = getPrivyClient();
+  const authKey = getAuthorizationKey();
+
   const response = await privy
     .wallets()
     .ethereum()
@@ -130,7 +152,7 @@ export async function sign7702AuthorizationServer(
         chain_id: chainId,
       },
       authorization_context: {
-        authorization_private_keys: [AUTHORIZATION_PRIVATE_KEY],
+        authorization_private_keys: [authKey],
       },
     });
 
@@ -144,4 +166,7 @@ export async function sign7702AuthorizationServer(
   };
 }
 
-export { privy };
+/** Re-export for any code that needs the raw client */
+export function getPrivy(): PrivyClient {
+  return getPrivyClient();
+}

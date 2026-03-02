@@ -1,12 +1,20 @@
 import { PrivyClient } from "@privy-io/node";
-import type { LinkedAccount } from "@privy-io/node";
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 
-const privy = new PrivyClient({
-  appId: process.env.NEXT_PUBLIC_PRIVY_APP_ID!,
-  appSecret: process.env.APP_SECRET!,
-});
+// Lazy singleton — deferred so Next.js build-time page collection
+// doesn't crash when env vars are absent.
+let _privy: PrivyClient | null = null;
+function getPrivy(): PrivyClient {
+  if (_privy) return _privy;
+  const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+  const appSecret = process.env.APP_SECRET;
+  if (!appId || !appSecret) {
+    throw new Error("[Auth] NEXT_PUBLIC_PRIVY_APP_ID or APP_SECRET env var is not set.");
+  }
+  _privy = new PrivyClient({ appId, appSecret });
+  return _privy;
+}
 
 interface AuthResult {
   userId: string;
@@ -75,7 +83,7 @@ export async function verifyAuth(
   const accessToken = authHeader.slice("Bearer ".length);
 
   try {
-    const verifiedClaims = await privy
+    const verifiedClaims = await getPrivy()
       .utils()
       .auth()
       .verifyAuthToken(accessToken);
@@ -121,15 +129,15 @@ export async function verifyAddressOwnership(
   }
 
   try {
-    const user = await privy.users()._get(userId);
-    const walletAddresses = (user.linked_accounts as LinkedAccount[])
+    const user = await getPrivy().users()._get(userId);
+    // linked_accounts is a mixed union — use runtime duck-typing to extract wallet addresses
+    const walletAddresses = ((user.linked_accounts ?? []) as unknown as Array<Record<string, unknown>>)
       .filter(
-        (a): a is Extract<LinkedAccount, { address: string }> =>
-          "address" in a &&
+        (a) =>
           typeof a.address === "string" &&
           (a.type === "wallet" || a.type === "smart_wallet")
       )
-      .map((a) => a.address.toLowerCase());
+      .map((a) => (a.address as string).toLowerCase());
 
     // Evict oldest entry if cache is at capacity
     if (addressCache.size >= MAX_CACHE_SIZE) {
