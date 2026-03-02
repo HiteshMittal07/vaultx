@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
 const BASE_URL =
-  process.env.NEXT_PUBLIC_APP_URL ?? "https://vaultx.finance";
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://vaultx-demo.vercel.app";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [

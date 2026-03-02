@@ -9,6 +9,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/api/", "/dashboard/", "/policy/"],
       },
     ],
-    sitemap: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://vaultx.finance"}/sitemap.xml`,
+    sitemap: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://vaultx-demo.vercel.app"}/sitemap.xml`,
   };
 }

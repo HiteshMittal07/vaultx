@@ -32,7 +32,7 @@ export const metadata: Metadata = {
   authors: [{ name: "VaultX" }],
   creator: "VaultX",
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_APP_URL ?? "https://vaultx.finance"
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://vaultx-demo.vercel.app"
   ),
   openGraph: {
     type: "website",
