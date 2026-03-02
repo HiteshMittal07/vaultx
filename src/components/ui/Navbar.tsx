@@ -1,25 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { Copy, Check, LogOut, Menu, X, ShieldCheck, Shield } from "lucide-react";
+import {
+  Copy, Check, LogOut, Menu, X, ShieldCheck, Shield,
+  LayoutDashboard, ArrowLeftRight, Landmark, ChevronDown,
+} from "lucide-react";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useDelegationStatus } from "@/hooks/useDelegationStatus";
 
-const publicLinks = [
-  { name: "Market", href: "#" },
-  { name: "Docs", href: "#" },
-  { name: "Governance", href: "#" },
-  { name: "FAQ", href: "#" },
-];
-
-const authLinks = [
-  { name: "Dashboard", href: "/dashboard" },
-  { name: "Swap", href: "/swap" },
-  { name: "Borrow", href: "/borrow" },
+const AUTH_LINKS = [
+  { name: "Dashboard", href: "/dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
+  { name: "Swap", href: "/swap", icon: <ArrowLeftRight className="h-4 w-4" /> },
+  { name: "Borrow", href: "/borrow", icon: <Landmark className="h-4 w-4" /> },
 ];
 
 export function Navbar() {
@@ -28,18 +24,14 @@ export function Navbar() {
   const pathname = usePathname();
   const [copied, setCopied] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
   const { isDelegated } = useDelegationStatus();
+
   const isAuth = ready && authenticated;
-  // Fallback to first wallet if privy type not found
-  const wallet =
-    wallets.find((w) => w.walletClientType === "privy") || wallets[0];
+  const wallet = wallets.find((w) => w.walletClientType === "privy") || wallets[0];
   const address = wallet?.address;
 
-  const truncateAddress = (addr: string) => {
-    if (!addr) return "";
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  };
+  const truncateAddress = (addr: string) =>
+    addr ? `${addr.slice(0, 6)}···${addr.slice(-4)}` : "";
 
   const handleCopy = () => {
     if (address) {
@@ -51,60 +43,57 @@ export function Navbar() {
 
   return (
     <motion.nav
-      initial={{ y: -100, opacity: 0 }}
+      initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.8, ease: "easeOut" }}
-      className="fixed top-0 left-0 right-0 z-50 flex justify-center py-6"
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="fixed top-0 left-0 right-0 z-50 flex justify-center py-4 px-4"
     >
       <div
         className={cn(
-          "flex items-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl transition-all duration-500 relative",
+          "flex items-center rounded-2xl border border-white/[0.08] bg-black/60 backdrop-blur-2xl transition-all duration-300 relative shadow-[0_8px_32px_rgba(0,0,0,0.4)]",
           isAuth
-            ? "w-full mx-4 md:mx-6 px-4 md:px-8 py-4 justify-between"
-            : "px-8 py-3 gap-8 rounded-full",
+            ? "w-full max-w-7xl px-5 py-3 justify-between"
+            : "px-6 py-3 gap-8 rounded-full"
         )}
       >
         {isAuth ? (
           <>
-            {/* Authenticated Layout */}
+            {/* ── Authenticated layout ── */}
 
-            <div className="flex items-center gap-6 md:gap-12">
-              {/* Logo */}
-              <Link
-                href="/dashboard"
-                className="flex items-center gap-2 shrink-0 group"
-              >
-                <span className="text-xl font-bold tracking-tight text-white transition-transform group-hover:scale-105">
+            {/* Left: Logo + Nav */}
+            <div className="flex items-center gap-8">
+              <Link href="/dashboard" className="flex items-center gap-2 shrink-0 group">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20">
+                  <span className="text-sm font-black text-emerald-400">V</span>
+                </div>
+                <span className="text-base font-black tracking-tight text-white">
                   Vault<span className="text-emerald-400">X</span>
                 </span>
               </Link>
 
-              {/* Desktop Navigation */}
-              <div className="hidden md:flex items-center gap-2">
-                {authLinks.map((link) => {
+              {/* Desktop nav */}
+              <div className="hidden md:flex items-center gap-1">
+                {AUTH_LINKS.map((link) => {
                   const isActive = pathname === link.href;
                   return (
                     <Link
                       key={link.name}
                       href={link.href}
                       className={cn(
-                        "relative px-4 py-2 text-sm font-medium tracking-wide transition-colors duration-300",
+                        "relative flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200",
                         isActive
-                          ? "text-white"
-                          : "text-zinc-500 hover:text-zinc-200",
+                          ? "text-white bg-white/8"
+                          : "text-zinc-500 hover:text-zinc-200 hover:bg-white/5"
                       )}
                     >
                       {isActive && (
                         <motion.div
-                          layoutId="nav-pill"
-                          className="absolute inset-0 z-0 rounded-full bg-white/10 border border-white/5 shadow-[0_0_20px_rgba(255,255,255,0.05)]"
-                          transition={{
-                            type: "spring",
-                            bounce: 0.2,
-                            duration: 0.6,
-                          }}
+                          layoutId="nav-active"
+                          className="absolute inset-0 rounded-xl bg-white/8 border border-white/[0.06]"
+                          transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
                         />
                       )}
+                      <span className="relative z-10 text-inherit">{link.icon}</span>
                       <span className="relative z-10">{link.name}</span>
                     </Link>
                   );
@@ -112,157 +101,151 @@ export function Navbar() {
               </div>
             </div>
 
-            {/* Right: Wallet, Mobile Menu & Logout */}
-            <div className="flex items-center gap-2 md:gap-4 shrink-0">
+            {/* Right: Wallet + Agent + Logout */}
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Wallet address chip */}
               {address && (
-                <div
-                  className="group flex items-center gap-2 rounded-full bg-white/5 py-2 px-3 md:px-4 ring-1 ring-white/10 transition-all hover:bg-white/10 cursor-pointer"
+                <button
                   onClick={handleCopy}
+                  className="group hidden sm:flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm font-mono text-zinc-300 transition-all hover:bg-white/[0.07] hover:border-white/15"
                 >
-                  <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                  <span className="hidden sm:inline text-sm font-mono text-zinc-300">
-                    {truncateAddress(address)}
-                  </span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(52,211,153,0.6)]" />
+                  {truncateAddress(address)}
                   {copied ? (
                     <Check className="h-3 w-3 text-emerald-400" />
                   ) : (
-                    <Copy className="h-3 w-3 text-zinc-500 transition-colors group-hover:text-white" />
+                    <Copy className="h-3 w-3 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
                   )}
-                </div>
+                </button>
               )}
 
-              {/* Agent Policy */}
+              {/* Agent policy indicator */}
               <Link
                 href="/policy?manage=true"
                 className={cn(
-                  "hidden md:flex items-center justify-center h-9 w-9 rounded-full transition-colors hover:bg-white/10",
+                  "hidden md:flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition-all",
                   isDelegated
-                    ? "text-emerald-400 hover:text-emerald-300"
-                    : "text-zinc-400 hover:text-yellow-400"
+                    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15"
+                    : "border-amber-500/25 bg-amber-500/10 text-amber-400 hover:bg-amber-500/15"
                 )}
-                title={isDelegated ? "Agent authorized — Manage policy" : "Agent not authorized — Set up policy"}
+                title={isDelegated ? "Agent active" : "Enable agent"}
               >
                 {isDelegated ? (
-                  <ShieldCheck className="h-4 w-4" />
+                  <ShieldCheck className="h-3.5 w-3.5" />
                 ) : (
-                  <Shield className="h-4 w-4" />
+                  <Shield className="h-3.5 w-3.5" />
                 )}
+                <span>{isDelegated ? "Agent active" : "Enable agent"}</span>
               </Link>
 
-              {/* Mobile Menu Button */}
-              <button
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="flex md:hidden items-center justify-center h-9 w-9 rounded-full text-zinc-400 transition-colors hover:bg-white/10"
-              >
-                {isMobileMenuOpen ? (
-                  <X className="h-5 w-5" />
-                ) : (
-                  <Menu className="h-5 w-5" />
-                )}
-              </button>
-
+              {/* Logout */}
               <button
                 onClick={logout}
-                className="hidden md:flex items-center justify-center h-9 w-9 rounded-full text-zinc-400 transition-colors hover:bg-white/10 hover:text-red-400"
-                title="Logout"
+                className="hidden md:flex items-center justify-center h-9 w-9 rounded-xl border border-white/[0.06] bg-white/[0.03] text-zinc-500 transition-all hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"
+                title="Sign out"
               >
                 <LogOut className="h-4 w-4" />
               </button>
+
+              {/* Mobile menu toggle */}
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="flex md:hidden items-center justify-center h-9 w-9 rounded-xl border border-white/[0.06] bg-white/[0.03] text-zinc-400 transition-all hover:bg-white/[0.06]"
+              >
+                {isMobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              </button>
             </div>
 
-            {/* Mobile Menu Overlay */}
-            <motion.div
-              initial={false}
-              animate={
-                isMobileMenuOpen
-                  ? { height: "auto", opacity: 1 }
-                  : { height: 0, opacity: 0 }
-              }
-              className="absolute top-full left-0 right-0 mt-2 overflow-hidden bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl md:hidden z-50"
-            >
-              <div className="p-4 flex flex-col gap-2">
-                {authLinks.map((link) => {
-                  const isActive = pathname === link.href;
-                  return (
+            {/* Mobile dropdown */}
+            <AnimatePresence>
+              {isMobileMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute top-[calc(100%+8px)] left-0 right-0 rounded-2xl border border-white/[0.08] bg-black/90 backdrop-blur-2xl shadow-2xl md:hidden z-50 overflow-hidden"
+                >
+                  <div className="p-3 space-y-1">
+                    {AUTH_LINKS.map((link) => {
+                      const isActive = pathname === link.href;
+                      return (
+                        <Link
+                          key={link.name}
+                          href={link.href}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={cn(
+                            "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors",
+                            isActive
+                              ? "bg-white/8 text-white"
+                              : "text-zinc-400 hover:bg-white/5 hover:text-white"
+                          )}
+                        >
+                          {link.icon}
+                          {link.name}
+                        </Link>
+                      );
+                    })}
+
+                    <div className="h-px bg-white/[0.05] my-2" />
+
+                    {/* Agent status */}
                     <Link
-                      key={link.name}
-                      href={link.href}
+                      href="/policy?manage=true"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className={cn(
-                        "flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-colors",
-                        isActive
-                          ? "bg-emerald-500/10 text-emerald-400"
-                          : "text-zinc-400 hover:bg-white/5 hover:text-white",
+                        "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors",
+                        isDelegated ? "text-emerald-400 hover:bg-emerald-500/10" : "text-amber-400 hover:bg-amber-500/10"
                       )}
                     >
-                      {link.name}
+                      {isDelegated ? <ShieldCheck className="h-4 w-4" /> : <Shield className="h-4 w-4" />}
+                      {isDelegated ? "Agent Active — Manage Policy" : "Enable VaultX Agent"}
                     </Link>
-                  );
-                })}
-                <Link
-                  href="/policy?manage=true"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-colors",
-                    isDelegated
-                      ? "text-emerald-400 hover:bg-emerald-500/10"
-                      : "text-yellow-400 hover:bg-yellow-500/10"
-                  )}
-                >
-                  {isDelegated ? (
-                    <ShieldCheck className="h-4 w-4" />
-                  ) : (
-                    <Shield className="h-4 w-4" />
-                  )}
-                  Agent Policy
-                </Link>
-                <button
-                  onClick={logout}
-                  className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-400/10 transition-colors mt-2 border-t border-white/5 pt-4"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Logout
-                </button>
-              </div>
-            </motion.div>
+
+                    {address && (
+                      <button
+                        onClick={() => { handleCopy(); setIsMobileMenuOpen(false); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-mono text-zinc-400 hover:bg-white/5 transition-colors"
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        {truncateAddress(address)}
+                        {copied ? <Check className="h-3.5 w-3.5 text-emerald-400 ml-auto" /> : <Copy className="h-3.5 w-3.5 text-zinc-600 ml-auto" />}
+                      </button>
+                    )}
+
+                    <button
+                      onClick={logout}
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors border-t border-white/[0.04] mt-1"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sign out
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </>
         ) : (
           <>
-            {/* Unauthenticated Layout */}
+            {/* ── Unauthenticated layout ── */}
+            <Link href="/" className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20">
+                <span className="text-sm font-black text-emerald-400">V</span>
+              </div>
+              <span className="text-base font-black tracking-tight text-white">
+                Vault<span className="text-emerald-400">X</span>
+              </span>
+            </Link>
 
-            {/* Left Side Links - Desktop Only */}
-            <div className="hidden md:flex items-center gap-10">
-              {publicLinks.slice(0, 2).map((link) => (
-                <Link
-                  key={link.name}
-                  href={link.href}
-                  className="text-[10px] font-semibold tracking-[0.15em] uppercase text-zinc-500 transition-colors hover:text-white"
-                >
-                  {link.name}
-                </Link>
-              ))}
+            <div className="hidden md:flex items-center gap-8 text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-500">
+              <a href="https://github.com/HiteshMittal07/vaultx" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Docs</a>
+              <a href="https://etherscan.io/address/0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Contract</a>
+              <a href="https://github.com/HiteshMittal07/vaultx" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">GitHub</a>
             </div>
 
-            {/* Center Logo */}
-            <div className="flex-1 flex justify-center md:flex-none">
-              <Link href="/" className="flex items-center gap-2 px-4">
-                <span className="text-2xl font-bold tracking-tighter text-white">
-                  Vault<span className="text-emerald-400">X</span>
-                </span>
-              </Link>
-            </div>
-
-            {/* Right Side Links - Desktop Only */}
-            <div className="hidden md:flex items-center gap-10">
-              {publicLinks.slice(2).map((link) => (
-                <Link
-                  key={link.name}
-                  href={link.href}
-                  className="text-[10px] font-semibold tracking-[0.15em] uppercase text-zinc-500 transition-colors hover:text-white"
-                >
-                  {link.name}
-                </Link>
-              ))}
+            <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Mainnet
             </div>
           </>
         )}

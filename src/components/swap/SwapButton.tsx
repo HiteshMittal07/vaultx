@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import { Loader2, ArrowLeftRight, AlertTriangle } from "lucide-react";
 import { TokenInfo } from "@/types";
 
 interface SwapButtonProps {
@@ -31,43 +31,61 @@ export function SwapButton({
     isExecuting ||
     isInsufficientBalance;
 
-  const getButtonText = () => {
+  const variant = isInsufficientBalance
+    ? "danger"
+    : error
+    ? "muted"
+    : Number(sellAmount) > 0
+    ? "active"
+    : "idle";
+
+  const content = (() => {
     if (isExecuting) {
       return (
-        <div className="flex items-center justify-center gap-2">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <span>Executing...</span>
-        </div>
+        <span className="flex items-center justify-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Executing swap…
+        </span>
       );
     }
     if (isInsufficientBalance) {
-      return `Insufficient ${tokenIn.symbol} balance`;
+      return (
+        <span className="flex items-center justify-center gap-2">
+          <AlertTriangle className="h-4 w-4" />
+          Insufficient {tokenIn.symbol}
+        </span>
+      );
     }
     if (error) {
-      return "No Route";
+      return "No route found";
     }
     if (Number(sellAmount) > 0) {
-      return "Swap";
+      return (
+        <span className="flex items-center justify-center gap-2">
+          <ArrowLeftRight className="h-4 w-4" />
+          Swap
+        </span>
+      );
     }
-    return "Enter amount";
+    return "Enter an amount";
+  })();
+
+  const styles = {
+    active: "bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_40px_rgba(52,211,153,0.3)] hover:shadow-[0_0_60px_rgba(52,211,153,0.5)]",
+    idle: "bg-white/[0.04] text-zinc-500 cursor-default border border-white/[0.06]",
+    danger: "bg-red-500/10 text-red-400 border border-red-500/20 cursor-default",
+    muted: "bg-white/[0.04] text-zinc-500 cursor-default border border-white/[0.06]",
   };
 
   return (
     <motion.button
-      whileHover={{
-        scale: 1.01,
-        backgroundColor: isInsufficientBalance ? "#ef4444" : "#10b981",
-      }}
-      whileTap={{ scale: 0.98 }}
-      onClick={onClick}
+      whileHover={!isDisabled ? { scale: 1.01 } : {}}
+      whileTap={!isDisabled ? { scale: 0.99 } : {}}
+      onClick={!isDisabled ? onClick : undefined}
       disabled={isDisabled}
-      className={`mt-8 w-full relative overflow-hidden rounded-2xl py-4 text-lg font-black transition-all disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed ${
-        isInsufficientBalance
-          ? "bg-red-500 text-white shadow-[0_20px_40px_-15px_rgba(239,68,68,0.3)]"
-          : "bg-emerald-500 text-black shadow-[0_20px_40px_-15px_rgba(16,185,129,0.3)]"
-      }`}
+      className={`w-full rounded-2xl py-4 text-base font-bold transition-all duration-300 ${styles[variant]}`}
     >
-      {getButtonText()}
+      {content}
     </motion.button>
   );
 }
