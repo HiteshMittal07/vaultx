@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
   getMorphoMarketParams,
   getMorphoMarketState,
@@ -7,13 +7,22 @@ import {
 } from "@/lib/blockchain/utils";
 import { MARKET_ID } from "@/constants/addresses";
 import { calculateMarketMetrics, parseLLTV } from "@/lib/calculations";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * GET /api/market
  * Returns consolidated market data (metrics, rates, oracle price, LLTV).
- * Public endpoint - no auth required.
+ * Public endpoint - rate limited by IP.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Rate limit by IP to prevent abuse of on-chain RPC calls
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    request.headers.get("x-real-ip") ??
+    "unknown";
+  const limited = rateLimit(`market:${ip}`, 30, 60_000); // 30 req/min per IP
+  if (limited) return limited;
+
   try {
     const [params, state] = await Promise.all([
       getMorphoMarketParams(MARKET_ID),
