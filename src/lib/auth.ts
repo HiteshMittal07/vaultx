@@ -1,4 +1,5 @@
 import { PrivyClient } from "@privy-io/node";
+import type { LinkedAccount } from "@privy-io/node";
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 
@@ -19,8 +20,7 @@ function safeCompare(a: string, b: string): boolean {
     const aBuf = Buffer.from(a, "utf8");
     const bBuf = Buffer.from(b, "utf8");
     if (aBuf.length !== bBuf.length) {
-      // Still run the comparison against itself to consume constant time,
-      // then return false.
+      // Still consume constant time, then return false
       timingSafeEqual(aBuf, aBuf);
       return false;
     }
@@ -50,10 +50,7 @@ export function verifyInternalKey(
   }
 
   if (!key || !safeCompare(key, expected)) {
-    return NextResponse.json(
-      { error: "Unauthorized" },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   return null;
@@ -97,7 +94,10 @@ export async function verifyAuth(
 // Bounded to MAX_CACHE_SIZE entries to prevent unbounded memory growth on
 // long-running (non-serverless) deployments.
 const MAX_CACHE_SIZE = 5_000;
-const addressCache = new Map<string, { addresses: string[]; expiresAt: number }>();
+const addressCache = new Map<
+  string,
+  { addresses: string[]; expiresAt: number }
+>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -122,11 +122,16 @@ export async function verifyAddressOwnership(
 
   try {
     const user = await privy.users()._get(userId);
-    const walletAddresses = (user.linked_accounts || [])
-      .filter((a: Record<string, unknown>) => a.type === "wallet" && a.address)
-      .map((a: Record<string, unknown>) => (a.address as string).toLowerCase());
+    const walletAddresses = (user.linked_accounts as LinkedAccount[])
+      .filter(
+        (a): a is Extract<LinkedAccount, { address: string }> =>
+          "address" in a &&
+          typeof a.address === "string" &&
+          (a.type === "wallet" || a.type === "smart_wallet")
+      )
+      .map((a) => a.address.toLowerCase());
 
-    // Evict oldest entries if cache is at capacity
+    // Evict oldest entry if cache is at capacity
     if (addressCache.size >= MAX_CACHE_SIZE) {
       const firstKey = addressCache.keys().next().value;
       if (firstKey !== undefined) addressCache.delete(firstKey);
