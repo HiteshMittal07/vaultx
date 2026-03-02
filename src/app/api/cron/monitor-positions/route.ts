@@ -1,21 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { monitorAllPositions } from "@/services/api/position-monitor.service";
 import { audit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
 /**
+ * Constant-time comparison for secrets to prevent timing attacks.
+ */
+function safeCompareSecret(a: string, b: string): boolean {
+  try {
+    const aBuf = Buffer.from(a, "utf8");
+    const bBuf = Buffer.from(b, "utf8");
+    if (aBuf.length !== bBuf.length) {
+      timingSafeEqual(aBuf, aBuf); // consume constant time
+      return false;
+    }
+    return timingSafeEqual(aBuf, bBuf);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * GET /api/cron/monitor-positions
  *
- * Vercel Cron endpoint that monitors all VaultX users' Morpho positions
- * and triggers automatic rebalancing when LTV exceeds the threshold.
+ * Monitors all VaultX users' Morpho positions and triggers automatic
+ * migration to Fluid when borrowing rates are more favorable.
  *
- * Runs every 5 minutes via Vercel Cron.
- * Auth: CRON_SECRET (Vercel sets this automatically for cron jobs).
+ * Auth: CRON_SECRET via Authorization: Bearer <secret>
+ * Runs every 10 minutes via GitHub Actions / Vercel Cron.
  */
 export async function GET(request: NextRequest) {
-  // Verify cron secret
-  const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
 
   if (!cronSecret) {
@@ -26,7 +42,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (authHeader !== `Bearer ${cronSecret}`) {
+  const authHeader = request.headers.get("authorization") ?? "";
+  const providedSecret = authHeader.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length)
+    : "";
+
+  if (!safeCompareSecret(providedSecret, cronSecret)) {
     audit({
       event: "auth_failure",
       details: { endpoint: "/api/cron/monitor-positions" },
@@ -59,6 +80,6 @@ export async function GET(request: NextRequest) {
       event: "offline_execution_failed",
       details: { error: message, action: "cron-monitor" },
     });
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
